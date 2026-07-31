@@ -46,7 +46,7 @@ export const categories: Category[] = [
   { id: "bebidas", name: "Bebidas", description: "Geladas e naturais", sortOrder: 6 },
 ];
 
-export const products: Product[] = [
+const productDefinitions: Array<Omit<Product, "imageUrl">> = [
   {
     id: "tradicional-hot-dog-tradicional",
     categoryId: "tradicionais",
@@ -404,6 +404,26 @@ export const products: Product[] = [
     optionGroups: [],
   },
 ];
+
+function imageForProduct(product: Omit<Product, "imageUrl">) {
+  if (product.categoryId === "dog-no-pote") return "/images/dogchef/dog-no-pote.webp";
+  if (product.categoryId === "porcoes") return "/images/dogchef/batata-completa.webp";
+  if (product.categoryId === "bebidas") return "/images/dogchef/bebidas.webp";
+  if (product.categoryId === "combos") return "/images/dogchef/hero-dog-do-chef.webp";
+  if (["prensado-alcatra", "prensado-dog-monstro", "prensado-picanha"].includes(product.id)) {
+    return "/images/dogchef/dog-monstro.webp";
+  }
+  if (product.id.includes("bacon") || product.id.includes("calabresa")) {
+    return "/images/dogchef/dog-monstro.webp";
+  }
+  if (product.categoryId === "prensadoes") return "/images/dogchef/hot-dog-cremoso.webp";
+  return "/images/dogchef/hot-dog-tradicional.webp";
+}
+
+export const products: Product[] = productDefinitions.map((product) => ({
+  ...product,
+  imageUrl: imageForProduct(product),
+}));
 
 export function seededCatalog(): Catalog {
   return {

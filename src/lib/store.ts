@@ -57,7 +57,7 @@ export async function getCatalog(): Promise<Catalog> {
 
   const [categoriesResult, productsResult, zonesResult, settingsResult, hoursResult] = await Promise.all([
     db.from("menu_categories").select("id, name, description, sort_order").eq("is_available", true).order("sort_order"),
-    db.from("products").select("id, category_id, name, description, price_cents, emoji, is_available, featured, prep_minutes").order("sort_order"),
+    db.from("products").select("*").order("sort_order"),
     db.from("delivery_zones").select("id, name, aliases, fee_cents, minimum_order_cents, is_available").order("name"),
     db.from("store_settings").select("accepting_orders").eq("id", true).maybeSingle(),
     db.from("working_hours").select("weekday, slot, opens_at, closes_at, is_closed").order("weekday").order("slot"),
@@ -74,19 +74,24 @@ export async function getCatalog(): Promise<Catalog> {
   const categoryIds = new Set(categories.map((category) => category.id));
   const remoteProducts: Product[] = productsResult.data
     .filter((product) => categoryIds.has(String(product.category_id)))
-    .map((product) => ({
-      id: String(product.id),
-      categoryId: String(product.category_id),
-      name: String(product.name),
-      description: String(product.description ?? ""),
-      priceCents: Number(product.price_cents),
-      emoji: String(product.emoji ?? "🌭"),
-      isAvailable: Boolean(product.is_available),
-      featured: Boolean(product.featured),
-      highlight: menuHighlight(String(product.id)),
-      prepMinutes: Number(product.prep_minutes ?? 20),
-      optionGroups: [],
-    }));
+    .map((product) => {
+      const id = String(product.id);
+      const fallbackProduct = products.find((candidate) => candidate.id === id);
+      return {
+        id,
+        categoryId: String(product.category_id),
+        name: String(product.name),
+        description: String(product.description ?? ""),
+        priceCents: Number(product.price_cents),
+        emoji: String(product.emoji ?? "🌭"),
+        imageUrl: String(product.image_url || fallbackProduct?.imageUrl || "/images/dogchef/hot-dog-tradicional.webp"),
+        isAvailable: Boolean(product.is_available),
+        featured: Boolean(product.featured),
+        highlight: menuHighlight(id),
+        prepMinutes: Number(product.prep_minutes ?? 20),
+        optionGroups: [],
+      };
+    });
   if (!remoteProducts.length) return safeFallback;
 
   const workingHours: WorkingHour[] = hoursResult.data?.map((hour) => ({
@@ -390,15 +395,39 @@ export async function updatePaymentStatus(orderId: string, paymentStatus: Paymen
   }
 }
 
-export async function updateProductAvailability(id: string, isAvailable: boolean) {
+type ProductSettingsUpdate = { isAvailable?: boolean; featured?: boolean };
+
+export async function updateProductSettings(id: string, update: ProductSettingsUpdate) {
   const product = products.find((candidate) => candidate.id === id);
   if (!product) throw new Error("Produto não encontrado.");
   const db = getSupabase();
   if (db) {
-    const { error } = await db.from("products").update({ is_available: isAvailable }).eq("id", id);
-    if (error) throw new Error("Não foi possível atualizar a disponibilidade.");
+    const { data: storedProduct, error: productError } = await db
+      .from("products")
+      .select("id, featured")
+      .eq("id", id)
+      .maybeSingle();
+    if (productError) throw new Error("Não foi possível consultar o produto.");
+    if (!storedProduct) throw new Error("Produto não encontrado.");
+
+    if (update.featured === true && !storedProduct.featured) {
+      const { count, error: countError } = await db
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("featured", true);
+      if (countError) throw new Error("Não foi possível consultar os destaques do banner.");
+      if ((count ?? 0) >= 5) throw new Error("O banner aceita no máximo 5 produtos.");
+    }
+    const payload: Record<string, boolean> = {};
+    if (typeof update.isAvailable === "boolean") payload.is_available = update.isAvailable;
+    if (typeof update.featured === "boolean") payload.featured = update.featured;
+    const { error } = await db.from("products").update(payload).eq("id", id);
+    if (error) throw new Error("Não foi possível atualizar o produto.");
+  } else if (update.featured === true && !product.featured && products.filter((item) => item.featured).length >= 5) {
+    throw new Error("O banner aceita no máximo 5 produtos.");
   }
-  product.isAvailable = isAvailable;
+  if (typeof update.isAvailable === "boolean") product.isAvailable = update.isAvailable;
+  if (typeof update.featured === "boolean") product.featured = update.featured;
   return product;
 }
 

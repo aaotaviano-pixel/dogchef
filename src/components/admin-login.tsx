@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LockKeyhole } from "lucide-react";
+import { ChefHat, LockKeyhole } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function AdminLogin() {
@@ -23,5 +23,5 @@ export function AdminLogin() {
     } finally { setLoading(false); }
   }
 
-  return <main className="admin-login"><section className="admin-login-card"><div className="brand-lockup"><span className="brand-mark">D</span><span><strong>DogChef</strong><small>operação</small></span></div><div className="login-icon"><LockKeyhole size={24}/></div><h1>Entrar no painel</h1><p>Use a senha definida nas variáveis de ambiente da loja.</p><form onSubmit={signIn}><label className="field"><span>Senha administrativa</span><input autoFocus required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)}/></label>{error && <p className="form-error">{error}</p>}<button className="button button-primary full" disabled={loading}>{loading ? "Entrando…" : "Entrar no painel"}</button></form></section></main>;
+  return <main className="admin-login"><section className="admin-login-card"><div className="brand-lockup"><span className="brand-mark"><ChefHat size={23}/></span><span><strong>Dog do Chef</strong><small>central da cozinha</small></span></div><div className="login-icon"><LockKeyhole size={24}/></div><h1>Entrar no painel</h1><p>Use a senha definida nas variáveis de ambiente da loja.</p><form onSubmit={signIn}><label className="field"><span>Senha administrativa</span><input autoFocus required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)}/></label>{error && <p className="form-error">{error}</p>}<button className="button button-primary full" disabled={loading}>{loading ? "Entrando…" : "Entrar no painel"}</button></form></section></main>;
 }

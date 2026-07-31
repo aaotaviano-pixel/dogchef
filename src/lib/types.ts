@@ -43,6 +43,7 @@ export type Product = {
   description: string;
   priceCents: number;
   emoji: string;
+  imageUrl: string;
   isAvailable: boolean;
   featured?: boolean;
   highlight?: string;

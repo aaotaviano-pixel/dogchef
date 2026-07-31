@@ -74,9 +74,9 @@ a { color: inherit; text-decoration: none; }
 .floating-cart strong { font-size: 16px; }
 
 .overlay { position: fixed; z-index: 50; inset: 0; display: flex; align-items: end; justify-content: center; padding: 0; background: rgba(35,20,14,.55); backdrop-filter: blur(4px); }
-.bottom-sheet { width: 100%; max-height: min(93vh, 760px); overflow-y: auto; padding: 28px 20px calc(23px + env(safe-area-inset-bottom)); border-radius: 25px 25px 0 0; background: var(--paper); box-shadow: 0 -15px 45px rgba(0,0,0,.16); animation: sheet-in .23s ease-out both; }
+.bottom-sheet { position: relative; width: 100%; max-height: min(93vh, 760px); overflow-y: auto; padding: 28px 20px calc(23px + env(safe-area-inset-bottom)); border-radius: 25px 25px 0 0; background: var(--paper); box-shadow: 0 -15px 45px rgba(0,0,0,.16); animation: sheet-in .23s ease-out both; }
 @keyframes sheet-in { from { transform: translateY(40px); opacity: .1; } to { transform: translateY(0); opacity: 1; } }
-.sheet-close { position: absolute; top: 16px; right: 17px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 50%; color: var(--ink); background: #f3ebe5; }
+.sheet-close { position: absolute; z-index: 3; top: 16px; right: 17px; display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid rgba(53, 43, 35, .18); border-radius: 50%; color: var(--ink); background: rgba(255, 255, 255, .94); box-shadow: 0 4px 12px rgba(48, 38, 31, .12); }
 .bottom-sheet h2 { margin: 0 0 6px; letter-spacing: -.05em; font-family: Georgia, serif; font-size: 29px; }
 .muted { margin: 0; color: var(--muted); line-height: 1.45; font-size: 13px; }
 .option-group, .choice-field { margin: 22px 0 0; padding: 0; border: 0; }
@@ -261,8 +261,11 @@ a { color: inherit; text-decoration: none; }
 .admin-loading { min-height: 100vh; display: grid; align-content: center; justify-items: center; gap: 13px; color: #6e5d53; }
 .admin-loading p { margin: 0; }
 .login-icon { display: grid; width: 48px; height: 48px; margin: 28px 0 15px; place-items: center; border-radius: 16px; color: var(--orange); background: #ffe9df; }
-.admin-login { min-height: 100vh; display: grid; place-items: center; padding: 20px; background: radial-gradient(circle at top left, #fbd6a4, transparent 30%), var(--cream); }
-.admin-login-card { width: min(100%, 390px); padding: 26px; border: 1px solid var(--line); border-radius: 21px; background: var(--paper); box-shadow: var(--shadow); }
+.admin-login { min-height: 100vh; display: grid; place-items: center; padding: 20px; background: #f6faf6; }
+.admin-login-card { width: min(100%, 390px); padding: 26px; border: 1px solid #dedfd7; border-radius: 8px; background: var(--paper); box-shadow: 0 18px 44px rgba(50, 42, 34, .12); }
+.admin-login .brand-mark { border: 1px solid #971720; border-radius: 8px; background: #b6202c; box-shadow: none; }
+.admin-login .login-icon { border-radius: 8px; color: #9d1923; background: #fbe7e8; }
+.admin-login .button { border-radius: 8px; background: #b6202c; }
 .admin-login-card h1 { margin: 0; font-family: Georgia, serif; font-size: 30px; letter-spacing: -.05em; }
 .admin-login-card > p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .admin-login-card form { margin-top: 20px; }
@@ -300,128 +303,158 @@ a { color: inherit; text-decoration: none; }
 
 @media (min-width: 1450px) { .admin-content { margin-left: calc((100vw - 1220px) / 2 + 250px); } }
 
-/* DogChef menu theme: scoped, additive styles for the customer storefront. */
+/* Light Dog do Chef storefront with an admin-managed product showcase. */
 .dogchef-store {
-  --cream: #0b0908;
-  --paper: #17110e;
-  --ink: #fff5df;
-  --muted: #cfbfa5;
-  --line: rgba(241, 181, 39, .25);
-  --orange: #c21f19;
-  --orange-dark: #8f120e;
-  --yellow: #f2b51d;
-  --shadow: 0 22px 52px rgba(0, 0, 0, .45);
-  background:
-    radial-gradient(circle at 100% 0, rgba(194, 31, 25, .2), transparent 29rem),
-    radial-gradient(circle at 0 38rem, rgba(242, 181, 29, .12), transparent 26rem),
-    #0b0908;
+  --cream: #f6faf6;
+  --paper: #ffffff;
+  --ink: #241b16;
+  --muted: #71665e;
+  --line: #dedfd7;
+  --orange: #b6202c;
+  --orange-dark: #8d1720;
+  --yellow: #f1b51c;
+  --green: #24785b;
+  --shadow: 0 18px 44px rgba(50, 42, 34, .12);
+  background: #f6faf6;
   color: var(--ink);
 }
 
-.dogchef-store .store-header { border-bottom: 1px solid rgba(242, 181, 29, .12); }
-.dogchef-store .brand-lockup strong { color: var(--yellow); font-family: Georgia, serif; letter-spacing: -.03em; text-transform: uppercase; }
-.dogchef-store .brand-lockup small { color: #bcae9b; }
-.dogchef-store .brand-mark {
-  border: 1px solid var(--yellow);
-  background: linear-gradient(145deg, #e23726, #73110f);
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .35), 0 0 0 3px rgba(242, 181, 29, .08);
-}
-.dogchef-store .icon-button { border-color: rgba(242, 181, 29, .3); color: var(--yellow); background: #16100d; }
-.dogchef-store .icon-button:hover { border-color: var(--yellow); color: #fff8e8; background: #28140f; }
-.dogchef-store .cart-count, .dogchef-store .round-add, .dogchef-store .button-primary, .dogchef-store .floating-cart { background: linear-gradient(135deg, #d62a20, #9e1511); }
+.dogchef-store * { letter-spacing: 0; }
+.dogchef-store .store-header { border-bottom: 1px solid #e6e8e1; }
+.dogchef-store .brand-lockup strong { color: #2c211b; font-family: Georgia, serif; font-size: 22px; text-transform: uppercase; }
+.dogchef-store .brand-lockup small { color: #796b60; }
+.dogchef-store .brand-mark { border: 1px solid #971720; border-radius: 8px; background: var(--orange); box-shadow: none; }
+.store-header-actions { display: flex; align-items: center; gap: 8px; }
+.admin-shortcut { display: inline-flex; min-height: 42px; align-items: center; gap: 7px; padding: 0 12px; border: 1px solid #d6d8d1; border-radius: 8px; color: #3d3029; background: white; font-size: 12px; font-weight: 800; }
+.admin-shortcut:hover { border-color: var(--orange); color: var(--orange); }
+.dogchef-store .icon-button { border-color: #d6d8d1; border-radius: 8px; color: #31251f; background: white; }
+.dogchef-store .icon-button:hover { border-color: var(--orange); color: var(--orange); }
+.dogchef-store .cart-count,
+.dogchef-store .round-add,
+.dogchef-store .button-primary,
+.dogchef-store .floating-cart { background: var(--orange); }
 
 .dogchef-store .dogchef-hero {
-  border: 1px solid rgba(242, 181, 29, .5);
-  background:
-    linear-gradient(120deg, rgba(8, 7, 6, .2), rgba(88, 11, 8, .25)),
-    linear-gradient(133deg, #120c0a 0%, #3a0c08 55%, #8c1912 100%);
-  box-shadow: 0 20px 45px rgba(0, 0, 0, .38), inset 0 0 0 1px rgba(255, 255, 255, .035);
+  min-height: 470px;
+  padding: 0;
+  border: 1px solid #dedfd7;
+  border-radius: 8px;
+  color: var(--ink);
+  background: white;
+  box-shadow: var(--shadow);
 }
-.dogchef-store .dogchef-hero::before { border-color: rgba(242, 181, 29, .24); }
-.dogchef-store .dogchef-hero::after { content: "🌭"; filter: saturate(.9) contrast(1.05); }
-.dogchef-store .hero-meta span { border-color: rgba(242, 181, 29, .25); background: rgba(0, 0, 0, .24); }
+.dogchef-store .dogchef-hero::before,
+.dogchef-store .dogchef-hero::after { display: none; }
+.showcase-slides,
+.showcase-slide,
+.showcase-shade { position: absolute !important; inset: 0; }
+.showcase-slides { z-index: 0; overflow: hidden; }
+.showcase-slide { width: 100% !important; height: 100% !important; object-fit: cover; object-position: center; opacity: 0; transition: opacity 850ms ease; }
+.showcase-slide.is-active { opacity: 1; }
+.showcase-shade { z-index: 1; background: linear-gradient(90deg, rgba(255,255,255,.98) 0%, rgba(255,255,255,.92) 39%, rgba(255,255,255,.32) 66%, rgba(255,255,255,.02) 100%); }
+.hero-content { position: relative; z-index: 2; display: flex; width: 58%; min-height: 470px; flex-direction: column; justify-content: center; padding: 48px; }
+.dogchef-store .hero-content .eyebrow { color: var(--green); }
+.showcase-kicker { margin: 0 0 10px; color: var(--orange); font-size: 11px; font-weight: 900; text-transform: uppercase; }
+.dogchef-store .hero h1 { max-width: 560px; margin: 0; color: #241b16; font-size: 62px; line-height: .98; }
+.hero-content > p:not(.eyebrow, .showcase-kicker) { max-width: 520px; margin: 17px 0 20px; color: #5f554e; font-size: 14px; line-height: 1.55; }
+.showcase-actions { display: flex; align-items: center; gap: 14px; }
+.showcase-actions .button { min-width: 144px; border-radius: 8px; }
+.showcase-actions > strong { color: #292019; font-size: 23px; }
+.dogchef-store .hero-meta { margin-top: 20px; color: #4d433d; }
+.dogchef-store .hero-meta span { border-color: #d8d9d2; border-radius: 8px; background: rgba(255,255,255,.78); }
+.showcase-controls { position: absolute; z-index: 3; right: 22px; bottom: 22px; display: flex; align-items: center; gap: 8px; padding: 6px; border: 1px solid rgba(70,58,48,.16); border-radius: 8px; background: rgba(255,255,255,.9); }
+.showcase-controls > button { display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 6px; color: #3a2d26; background: transparent; }
+.showcase-controls > button:hover { color: var(--orange); background: #f4eee9; }
+.showcase-controls > div { display: flex; align-items: center; gap: 6px; }
+.showcase-dot { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #b7b7ad; transition: width .2s, background .2s; }
+.showcase-dot.is-active { width: 24px; border-radius: 4px; background: var(--orange); }
 
-.dogchef-store .menu-section { margin-top: 42px; }
+.dogchef-store .menu-section { margin-top: 46px; }
+.dogchef-store .section-heading h2 { font-size: 38px; letter-spacing: 0; }
 .dogchef-store .section-heading .eyebrow,
-.dogchef-store .dogchef-menu-section__header .eyebrow { color: var(--yellow); }
+.dogchef-store .dogchef-menu-section__header .eyebrow { color: var(--orange); }
 .dogchef-store .section-heading > span,
-.dogchef-store .dogchef-menu-section__header > span { color: #bfae93; }
-.dogchef-store .category { border-color: rgba(242, 181, 29, .28); color: #d8c9b2; background: rgba(255, 255, 255, .025); }
+.dogchef-store .dogchef-menu-section__header > span { color: #766b63; }
+.dogchef-store .category { border-color: #d6d9d1; border-radius: 50px; color: #4a3c34; background: white; }
 .dogchef-store .category:hover,
-.dogchef-store .category.active { border-color: var(--yellow); color: #1b1009; background: var(--yellow); }
+.dogchef-store .category.active { border-color: #2d251f; color: white; background: #2d251f; }
 
 .dogchef-store .dogchef-menu-section { margin: 0 0 48px; scroll-margin-top: 20px; }
-.dogchef-store .dogchef-menu-section__header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 5px 0 16px;
-  padding: 0 2px 12px;
-  border-bottom: 1px solid rgba(242, 181, 29, .24);
-}
-.dogchef-store .dogchef-menu-section__header h3 {
-  margin: 0;
-  color: #fff7e6;
-  font-family: Georgia, serif;
-  font-size: clamp(25px, 5vw, 38px);
-  letter-spacing: -.055em;
-  line-height: 1;
-}
+.dogchef-store .dogchef-menu-section__header { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 5px 0 16px; padding: 0 2px 12px; border-bottom: 1px solid #dcdfd7; }
+.dogchef-store .dogchef-menu-section__header h3 { margin: 0; color: #2c211b; font-family: Georgia, serif; font-size: 34px; letter-spacing: 0; line-height: 1; }
 .dogchef-store .dogchef-menu-section__header > span { padding-bottom: 3px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.dogchef-store .product-grid { grid-template-columns: 1fr; gap: 13px; }
-.dogchef-store .product-card {
-  min-height: 210px;
-  border-color: rgba(242, 181, 29, .25);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, 0)),
-    #17110e;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, .2);
-}
-.dogchef-store .product-card::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 3px;
-  content: "";
-  background: linear-gradient(90deg, var(--orange), var(--yellow), transparent 78%);
-  opacity: .85;
-}
-.dogchef-store .product-card:hover {
-  border-color: rgba(242, 181, 29, .72);
-  box-shadow: 0 18px 34px rgba(0, 0, 0, .38), 0 0 0 1px rgba(194, 31, 25, .16);
-}
-.dogchef-store .food-emoji { border: 1px solid rgba(242, 181, 29, .23); background: radial-gradient(circle at 30% 25%, #4e1510, #1b100c 70%); }
-.dogchef-store .pill { color: #221406; background: var(--yellow); }
-.dogchef-store .product-copy h3 { color: #fff6e2; }
-.dogchef-store .product-copy p { color: #c8b69b; }
-.dogchef-store .product-bottom strong { color: var(--yellow); font-size: 17px; }
-.dogchef-store .round-add { color: white; box-shadow: 0 5px 13px rgba(0, 0, 0, .28); }
-.dogchef-store .round-add:hover { background: linear-gradient(135deg, #ed3c2e, #b51913); }
-.dogchef-store .sold-out { background: #6f2620; }
-.dogchef-store .floating-cart { border: 1px solid rgba(242, 181, 29, .45); box-shadow: 0 16px 34px rgba(0, 0, 0, .52); }
+.dogchef-store .product-grid { grid-template-columns: 1fr; gap: 14px; }
+.dogchef-store .product-card { min-height: 0; padding: 0; border-color: #dfe1da; border-radius: 8px; background: white; box-shadow: 0 8px 22px rgba(47, 42, 35, .07); }
+.dogchef-store .product-card:hover { border-color: #c7bbae; box-shadow: 0 16px 30px rgba(47, 42, 35, .12); }
+.product-image { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 7px 7px 0 0; background: #f1f2ed; }
+.product-image img { object-fit: cover; transition: transform .35s ease; }
+.product-card:hover .product-image img { transform: scale(1.035); }
+.dogchef-store .pill { position: absolute; z-index: 1; top: 10px; left: 10px; border-radius: 6px; color: #332408; background: var(--yellow); }
+.dogchef-store .product-copy { padding: 15px 15px 0; }
+.dogchef-store .product-copy h3 { color: #2b211b; font-size: 17px; letter-spacing: 0; }
+.dogchef-store .product-copy p { color: #74675f; font-size: 12px; -webkit-line-clamp: 2; }
+.dogchef-store .product-bottom { padding: 0 15px 15px; }
+.dogchef-store .product-bottom strong { color: #9d1923; font-size: 18px; }
+.dogchef-store .round-add { border-radius: 8px; color: white; box-shadow: none; }
+.dogchef-store .round-add:hover { background: var(--orange-dark); }
+.dogchef-store .sold-out { top: 10px; right: 10px; background: #72534c; }
+.dogchef-store .floating-cart { border: 1px solid #911821; border-radius: 8px; box-shadow: 0 14px 32px rgba(116, 20, 28, .3); }
+.product-detail-image { position: relative; width: calc(100% + 40px); aspect-ratio: 16 / 8; margin: -28px -20px 22px; overflow: hidden; border-radius: 8px 8px 0 0; background: #f1f2ed; }
+.product-detail-image img { object-fit: cover; }
 
-/* Scroll reveal utility. The observer adds .is-visible; reduced motion stays fully visible. */
-.dogchef-store .menu-reveal { opacity: 0; transform: translateY(22px); transition: opacity .62s ease, transform .62s cubic-bezier(.22, .8, .22, 1); }
+.admin-product-image { flex: 0 0 auto; border-radius: 6px; object-fit: cover; background: #f0eee9; }
+.product-switches article { border-radius: 8px; }
+.product-switches article.is-featured { border-color: #e2ae23; box-shadow: inset 0 0 0 1px rgba(226,174,35,.18); }
+.product-admin-actions { display: flex !important; flex: 0 0 auto !important; align-items: center; gap: 7px; }
+.showcase-toggle { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid #d8d0c9; border-radius: 7px; color: #80736a; background: white; }
+.showcase-toggle.is-active { border-color: #e0aa1b; color: #7a5500; background: #fff1bf; }
+.showcase-counter { display: inline-flex; align-items: center; gap: 5px; color: #7a5500; font-size: 11px; font-weight: 900; white-space: nowrap; }
+
+/* Scroll reveal utility. */
+.dogchef-store .menu-reveal { opacity: 0; transform: translateY(18px); transition: opacity .55s ease, transform .55s cubic-bezier(.22, .8, .22, 1); }
 .dogchef-store .menu-reveal.is-visible { opacity: 1; transform: translateY(0); }
-.dogchef-store .menu-reveal--title { transition-duration: .72s; }
-.dogchef-store .product-card.menu-reveal:nth-child(2) { transition-delay: 55ms; }
-.dogchef-store .product-card.menu-reveal:nth-child(3) { transition-delay: 110ms; }
-.dogchef-store .product-card.menu-reveal:nth-child(4) { transition-delay: 165ms; }
+.dogchef-store .product-card.menu-reveal:nth-child(2) { transition-delay: 45ms; }
+.dogchef-store .product-card.menu-reveal:nth-child(3) { transition-delay: 90ms; }
+
+@media (max-width: 619px) {
+  .dogchef-store { padding-right: 12px; padding-left: 12px; }
+  .dogchef-store .store-header { height: 76px; }
+  .dogchef-store .brand-lockup { gap: 7px; }
+  .dogchef-store .brand-lockup strong { font-size: 17px; }
+  .dogchef-store .brand-lockup small { max-width: 104px; font-size: 8px; line-height: 1.2; }
+  .dogchef-store .brand-mark { width: 36px; height: 36px; }
+  .admin-shortcut { min-height: 38px; padding: 0 9px; }
+  .dogchef-store .icon-button { width: 38px; height: 38px; }
+  .dogchef-store .dogchef-hero { min-height: 560px; }
+  .showcase-slide { object-position: 67% center; }
+  .showcase-shade { background: linear-gradient(0deg, rgba(255,255,255,.99) 0%, rgba(255,255,255,.97) 44%, rgba(255,255,255,.28) 73%, rgba(255,255,255,0) 100%); }
+  .hero-content { width: 100%; min-height: 560px; justify-content: end; padding: 230px 22px 24px; }
+  .dogchef-store .hero h1 { font-size: 39px; }
+  .hero-content > p:not(.eyebrow, .showcase-kicker) { margin: 12px 0 15px; font-size: 13px; }
+  .showcase-actions > strong { font-size: 20px; }
+  .dogchef-store .hero-meta { margin-top: 14px; gap: 7px; }
+  .dogchef-store .hero-meta span { padding: 7px 8px; font-size: 10px; }
+  .showcase-controls { top: 13px; right: 13px; bottom: auto; }
+  .dogchef-store .menu-section { margin-top: 36px; }
+  .dogchef-store .section-heading h2 { font-size: 30px; }
+  .dogchef-store .dogchef-menu-section__header h3 { font-size: 28px; }
+}
 
 @media (min-width: 620px) {
-  .dogchef-store .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+  .dogchef-store .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .dogchef-store .product-copy { min-height: 105px; }
+  .product-detail-image { width: calc(100% + 60px); margin: -30px -30px 24px; }
 }
 
 @media (min-width: 920px) {
   .dogchef-store .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .dogchef-store .product-card { min-height: 232px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .dogchef-store .menu-reveal,
   .dogchef-store .menu-reveal.is-visible,
   .dogchef-store .product-card:hover,
-  .dogchef-store .round-add:hover { opacity: 1; transform: none; transition: none; }
+  .dogchef-store .product-image img,
+  .showcase-slide { opacity: 1; transform: none; transition: none; }
+  .showcase-slide:not(.is-active) { opacity: 0; }
 }
