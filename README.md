@@ -151,11 +151,11 @@ O servidor é responsável por preço, disponibilidade, regras de entrega, trans
 
 ## Limitação importante: fallback sem banco
 
-Quando `SUPABASE_URL` e `SUPABASE_SECRET_KEY` não estão configuradas, a aplicação entra em modo de demonstração com catálogo e pedidos em memória. Esse fallback serve apenas para desenvolvimento e preview:
+Quando `SUPABASE_URL` e `SUPABASE_SECRET_KEY` não estão configuradas, o ambiente local pode operar em modo de demonstração com catálogo e pedidos em memória. Em produção, o catálogo continua visível, mas a aplicação mantém o recebimento de pedidos fechado deliberadamente. Esse fallback serve apenas para desenvolvimento e preview:
 
 - os pedidos somem ao reiniciar a instância;
 - não há persistência, auditoria ou concorrência confiável;
 - webhooks, fila de impressão e atualizações de pagamento não têm garantia operacional;
 - não é seguro nem adequado para receber pedidos reais.
 
-Para publicar a operação da DogChef, configure Supabase, variáveis de produção, webhooks e o agente de impressão antes de aceitar pedidos.
+Para abrir a operação da DogChef ao público, configure Supabase, variáveis de produção, webhooks e o agente de impressão antes de aceitar pedidos.
