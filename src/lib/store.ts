@@ -1,25 +1,94 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import { createQuote } from "@/lib/checkout";
 import { canTransition, hashTrackingToken, newOrderId, newPublicCode, newTrackingToken } from "@/lib/orders";
 import { defaultWorkingHours, products, seededCatalog } from "@/lib/seed";
+import { normalizeNeighborhood } from "@/lib/shop";
 import { getSupabase, hasSupabase } from "@/lib/supabase";
-import type { Catalog, Category, CheckoutInput, DeliveryZone, Order, OrderStatus, PaymentStatus, Product, WorkingHour } from "@/lib/types";
-import { sendWhatsAppStatus } from "@/lib/integrations/whatsapp";
+import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, Product, ProductImage, ProductInput, WorkingHour } from "@/lib/types";
 
 type PrintJob = {
   id: string;
   orderId: string;
-  status: "queued" | "leased" | "printed" | "failed";
+  status: "queued" | "leased" | "printed" | "failed" | "dead";
   leaseToken?: string;
   leaseExpiresAt?: number;
   attempts: number;
 };
 
+type StoredCustomerAccount = CustomerAccount & { passwordHash?: string; authUserId?: string };
+
+const MAX_PRINT_ATTEMPTS = 5;
+
 const memory = {
   orders: [] as Order[],
+  customerAccounts: [] as StoredCustomerAccount[],
+  trackingHashes: {} as Record<string, string>,
   printJobs: [] as PrintJob[],
   acceptingOrders: true,
+  defaultDeliveryFeeCents: 800,
+  deliveryZones: [] as DeliveryZone[],
   workingHours: deepCopy(defaultWorkingHours),
 };
+
+const localCatalogFile = path.join(process.cwd(), ".data", "catalog.json");
+const localCommerceFile = path.join(process.cwd(), ".data", "commerce.json");
+let localCatalogLoaded = false;
+
+function normalizeLocalProduct(product: Product): Product {
+  const imageUrl = product.imageUrl || "/images/dogchef/hot-dog-tradicional.webp";
+  const images = Array.isArray(product.images) && product.images.length
+    ? product.images
+    : [{ id: `seed-${product.id}`, url: imageUrl, isMain: true, sortOrder: 0 }];
+  return { ...product, imageUrl, images, showcaseOrder: Number(product.showcaseOrder ?? 0) };
+}
+
+async function ensureLocalCatalogLoaded() {
+  if (localCatalogLoaded || hasSupabase() || process.env.NODE_ENV === "production") return;
+  localCatalogLoaded = true;
+  try {
+    const stored = JSON.parse(await readFile(localCatalogFile, "utf8")) as { products?: Product[] };
+    if (stored.products?.length) products.splice(0, products.length, ...stored.products.map(normalizeLocalProduct));
+  } catch {
+    // The seed catalog is the intended first-run state.
+  }
+}
+
+async function persistLocalCatalog() {
+  if (hasSupabase() || process.env.NODE_ENV === "production") return;
+  await mkdir(path.dirname(localCatalogFile), { recursive: true });
+  await writeFile(localCatalogFile, JSON.stringify({ products }, null, 2), "utf8");
+}
+
+async function ensureLocalCommerceLoaded() {
+  if (hasSupabase() || process.env.NODE_ENV === "production") return;
+  try {
+    const stored = JSON.parse(await readFile(localCommerceFile, "utf8")) as {
+      orders?: Order[];
+      customerAccounts?: StoredCustomerAccount[];
+      trackingHashes?: Record<string, string>;
+    };
+    memory.orders = Array.isArray(stored.orders) ? stored.orders : [];
+    memory.customerAccounts = Array.isArray(stored.customerAccounts) ? stored.customerAccounts : [];
+    memory.trackingHashes = stored.trackingHashes && typeof stored.trackingHashes === "object" ? stored.trackingHashes : {};
+  } catch {
+    // The empty local commerce state is the intended first-run state.
+  }
+}
+
+async function persistLocalCommerce() {
+  if (hasSupabase() || process.env.NODE_ENV === "production") return;
+  await mkdir(path.dirname(localCommerceFile), { recursive: true });
+  const temporaryFile = `${localCommerceFile}.${process.pid}.${randomUUID()}.tmp`;
+  await writeFile(temporaryFile, JSON.stringify({
+    orders: memory.orders,
+    customerAccounts: memory.customerAccounts,
+    trackingHashes: memory.trackingHashes,
+  }, null, 2), "utf8");
+  await rename(temporaryFile, localCommerceFile);
+}
 
 function now() {
   return new Date().toISOString();
@@ -45,9 +114,21 @@ function formatHoursLabel(hours: WorkingHour[], fallback: string) {
   return sameSchedule ? `${active.length} dias ativos · ${opensAt} às ${closesAt}` : fallback;
 }
 
+function publicWhatsAppUrl() {
+  const number = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER?.replace(/\D/g, "");
+  return number ? `https://wa.me/${number}` : undefined;
+}
+
 export async function getCatalog(): Promise<Catalog> {
+  await ensureLocalCatalogLoaded();
   // Catalog fallback makes preview/development usable before the hosted database is provisioned.
-  const fallback = { ...seededCatalog(), acceptingOrders: memory.acceptingOrders, workingHours: deepCopy(memory.workingHours) };
+  const fallback = {
+    ...seededCatalog(),
+    acceptingOrders: memory.acceptingOrders,
+    defaultDeliveryFeeCents: memory.defaultDeliveryFeeCents,
+    deliveryZones: deepCopy(memory.deliveryZones),
+    workingHours: deepCopy(memory.workingHours),
+  };
   const safeFallback = process.env.NODE_ENV === "production" ? { ...fallback, acceptingOrders: false } : fallback;
   const db = getSupabase();
   if (!db) {
@@ -55,12 +136,16 @@ export async function getCatalog(): Promise<Catalog> {
     return safeFallback;
   }
 
-  const [categoriesResult, productsResult, zonesResult, settingsResult, hoursResult] = await Promise.all([
+  const [categoriesResult, productsResult, imagesResult, zonesResult, settingsResult, hoursResult, groupsResult, linksResult, optionsResult] = await Promise.all([
     db.from("menu_categories").select("id, name, description, sort_order").eq("is_available", true).order("sort_order"),
     db.from("products").select("*").order("sort_order"),
-    db.from("delivery_zones").select("id, name, aliases, fee_cents, minimum_order_cents, is_available").order("name"),
-    db.from("store_settings").select("accepting_orders").eq("id", true).maybeSingle(),
+    db.from("product_images").select("id, product_id, public_url, is_main, sort_order").order("sort_order"),
+    db.from("delivery_zones").select("id, name, aliases, fee_cents, minimum_order_cents, is_available").eq("is_available", true).order("name"),
+    db.from("store_settings").select("accepting_orders, default_delivery_fee_cents").eq("id", true).maybeSingle(),
     db.from("working_hours").select("weekday, slot, opens_at, closes_at, is_closed").order("weekday").order("slot"),
+    db.from("product_option_groups").select("id, name, min_selections, max_selections, required, is_available, sort_order").eq("is_available", true).order("sort_order"),
+    db.from("product_option_group_products").select("product_id, option_group_id"),
+    db.from("product_options").select("id, option_group_id, name, price_cents, is_available, sort_order").order("sort_order"),
   ]);
 
   if (categoriesResult.error || productsResult.error || !categoriesResult.data?.length || !productsResult.data?.length) return safeFallback;
@@ -72,11 +157,66 @@ export async function getCatalog(): Promise<Catalog> {
     sortOrder: Number(category.sort_order),
   }));
   const categoryIds = new Set(categories.map((category) => category.id));
+  const optionsByGroup = new Map<string, OptionGroup["options"]>();
+  if (!optionsResult.error) {
+    for (const option of optionsResult.data ?? []) {
+      const groupId = String(option.option_group_id);
+      const existing = optionsByGroup.get(groupId) ?? [];
+      existing.push({
+        id: String(option.id),
+        name: String(option.name),
+        priceCents: Number(option.price_cents),
+        isAvailable: Boolean(option.is_available),
+      });
+      optionsByGroup.set(groupId, existing);
+    }
+  }
+  const groupsById = new Map<string, OptionGroup>();
+  if (!groupsResult.error) {
+    for (const group of groupsResult.data ?? []) {
+      const id = String(group.id);
+      groupsById.set(id, {
+        id,
+        name: String(group.name),
+        minSelections: Number(group.min_selections),
+        maxSelections: Number(group.max_selections),
+        required: Boolean(group.required),
+        options: optionsByGroup.get(id) ?? [],
+      });
+    }
+  }
+  const groupsByProduct = new Map<string, OptionGroup[]>();
+  if (!linksResult.error) {
+    for (const link of linksResult.data ?? []) {
+      const productId = String(link.product_id);
+      const group = groupsById.get(String(link.option_group_id));
+      if (!group) continue;
+      const existing = groupsByProduct.get(productId) ?? [];
+      existing.push(group);
+      groupsByProduct.set(productId, existing);
+    }
+  }
+  const imagesByProduct = new Map<string, ProductImage[]>();
+  if (!imagesResult.error) {
+    for (const image of imagesResult.data ?? []) {
+      const productId = String(image.product_id);
+      const existing = imagesByProduct.get(productId) ?? [];
+      existing.push({
+        id: String(image.id),
+        url: String(image.public_url),
+        isMain: Boolean(image.is_main),
+        sortOrder: Number(image.sort_order),
+      });
+      imagesByProduct.set(productId, existing);
+    }
+  }
   const remoteProducts: Product[] = productsResult.data
     .filter((product) => categoryIds.has(String(product.category_id)))
     .map((product) => {
       const id = String(product.id);
       const fallbackProduct = products.find((candidate) => candidate.id === id);
+      const imageUrl = String(product.image_url || fallbackProduct?.imageUrl || "/images/dogchef/hot-dog-tradicional.webp");
+      const storedImages = imagesByProduct.get(id) ?? [];
       return {
         id,
         categoryId: String(product.category_id),
@@ -84,12 +224,14 @@ export async function getCatalog(): Promise<Catalog> {
         description: String(product.description ?? ""),
         priceCents: Number(product.price_cents),
         emoji: String(product.emoji ?? "🌭"),
-        imageUrl: String(product.image_url || fallbackProduct?.imageUrl || "/images/dogchef/hot-dog-tradicional.webp"),
+        imageUrl,
+        images: storedImages.length ? storedImages : [{ id: `legacy-${id}`, url: imageUrl, isMain: true, sortOrder: 0 }],
         isAvailable: Boolean(product.is_available),
         featured: Boolean(product.featured),
-        highlight: menuHighlight(id),
+        highlight: String(product.highlight || menuHighlight(id) || "") || undefined,
+        showcaseOrder: Number(product.showcase_order ?? product.sort_order ?? 0),
         prepMinutes: Number(product.prep_minutes ?? 20),
-        optionGroups: [],
+        optionGroups: groupsByProduct.get(id) ?? [],
       };
     });
   if (!remoteProducts.length) return safeFallback;
@@ -113,9 +255,11 @@ export async function getCatalog(): Promise<Catalog> {
     categories,
     products: remoteProducts,
     deliveryZones,
+    defaultDeliveryFeeCents: Number(settingsResult.data?.default_delivery_fee_cents ?? fallback.defaultDeliveryFeeCents),
     acceptingOrders: settingsResult.data?.accepting_orders ?? fallback.acceptingOrders,
     pixConfigured: Boolean(process.env.MERCADO_PAGO_ACCESS_TOKEN),
-    whatsappConfigured: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
+    whatsappConfigured: Boolean(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER),
+    whatsappUrl: publicWhatsAppUrl(),
     hoursLabel: formatHoursLabel(workingHours, fallback.hoursLabel),
     workingHours,
   };
@@ -125,7 +269,186 @@ export function isDatabaseConfigured() {
   return hasSupabase();
 }
 
-export async function createOrder(input: CheckoutInput): Promise<{ order: Order; trackingToken: string }> {
+function publicCustomer(account: StoredCustomerAccount): CustomerAccount {
+  const { passwordHash: _passwordHash, authUserId: _authUserId, ...customer } = account;
+  return { ...customer, profileComplete: Boolean(customer.phone) };
+}
+
+export async function findCustomerByEmail(email: string): Promise<StoredCustomerAccount | null> {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("customer_accounts")
+      .select("id, name, phone, email, password_hash, auth_user_id, created_at")
+      .eq("email", email)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: String(data.id),
+      name: String(data.name),
+      phone: data.phone ? String(data.phone) : "",
+      email: String(data.email),
+      passwordHash: data.password_hash ? String(data.password_hash) : undefined,
+      authUserId: data.auth_user_id ? String(data.auth_user_id) : undefined,
+      createdAt: String(data.created_at),
+      profileComplete: Boolean(data.phone),
+    };
+  }
+  await ensureLocalCommerceLoaded();
+  return deepCopy(memory.customerAccounts.find((customer) => customer.email === email) ?? null);
+}
+
+export async function getCustomerAccount(id: string): Promise<CustomerAccount | null> {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("customer_accounts")
+      .select("id, name, phone, email, created_at")
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: String(data.id),
+      name: String(data.name),
+      phone: data.phone ? String(data.phone) : "",
+      email: String(data.email),
+      createdAt: String(data.created_at),
+      profileComplete: Boolean(data.phone),
+    };
+  }
+  await ensureLocalCommerceLoaded();
+  const account = memory.customerAccounts.find((customer) => customer.id === id);
+  return account ? deepCopy(publicCustomer(account)) : null;
+}
+
+export async function createCustomerAccount(input: { name: string; phone: string; email: string; passwordHash: string }) {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db.from("customer_accounts").insert({
+      name: input.name,
+      phone: input.phone,
+      email: input.email,
+      password_hash: input.passwordHash,
+    }).select("id, name, phone, email, created_at").single();
+    if (error) {
+      if (error.code === "23505") throw new Error("Já existe uma conta com este e-mail.");
+      throw new Error("Não foi possível criar sua conta agora.");
+    }
+    return {
+      id: String(data.id),
+      name: String(data.name),
+      phone: String(data.phone),
+      email: String(data.email),
+      createdAt: String(data.created_at),
+      profileComplete: Boolean(data.phone),
+    } satisfies CustomerAccount;
+  }
+  await ensureLocalCommerceLoaded();
+  if (memory.customerAccounts.some((customer) => customer.email === input.email)) {
+    throw new Error("Já existe uma conta com este e-mail.");
+  }
+  const account: StoredCustomerAccount = {
+    id: randomUUID(),
+    name: input.name,
+    phone: input.phone,
+    email: input.email,
+    passwordHash: input.passwordHash,
+    createdAt: now(),
+    profileComplete: true,
+  };
+  memory.customerAccounts.push(account);
+  await persistLocalCommerce();
+  return deepCopy(publicCustomer(account));
+}
+
+export async function findOrCreateGoogleCustomer(input: { authUserId: string; email: string; name: string }) {
+  const db = getSupabase();
+  if (!db) throw new Error("O login com Google depende da configuração do Supabase.");
+
+  const selection = "id, name, phone, email, password_hash, auth_user_id, created_at";
+  const byAuth = await db.from("customer_accounts").select(selection).eq("auth_user_id", input.authUserId).maybeSingle();
+  if (byAuth.error) throw new Error("A estrutura do login com Google ainda não foi aplicada no banco.");
+  if (byAuth.data) {
+    return {
+      id: String(byAuth.data.id),
+      name: String(byAuth.data.name),
+      phone: byAuth.data.phone ? String(byAuth.data.phone) : "",
+      email: String(byAuth.data.email),
+      createdAt: String(byAuth.data.created_at),
+      profileComplete: Boolean(byAuth.data.phone),
+    } satisfies CustomerAccount;
+  }
+
+  const byEmail = await db.from("customer_accounts").select(selection).eq("email", input.email).maybeSingle();
+  if (byEmail.error) throw new Error("Não foi possível verificar sua conta agora.");
+  if (byEmail.data) {
+    if (byEmail.data.auth_user_id && String(byEmail.data.auth_user_id) !== input.authUserId) {
+      throw new Error("Este e-mail já está vinculado a outra conta Google.");
+    }
+    const linked = await db
+      .from("customer_accounts")
+      .update({ auth_user_id: input.authUserId, updated_at: now() })
+      .eq("id", byEmail.data.id)
+      .select("id, name, phone, email, created_at")
+      .single();
+    if (linked.error) throw new Error("Não foi possível vincular sua conta Google.");
+    return {
+      id: String(linked.data.id),
+      name: String(linked.data.name),
+      phone: linked.data.phone ? String(linked.data.phone) : "",
+      email: String(linked.data.email),
+      createdAt: String(linked.data.created_at),
+      profileComplete: Boolean(linked.data.phone),
+    } satisfies CustomerAccount;
+  }
+
+  const created = await db.from("customer_accounts").insert({
+    auth_user_id: input.authUserId,
+    name: input.name,
+    email: input.email,
+    phone: null,
+    password_hash: null,
+  }).select("id, name, phone, email, created_at").single();
+  if (created.error) throw new Error("Não foi possível criar sua conta com o Google.");
+  return {
+    id: String(created.data.id),
+    name: String(created.data.name),
+    phone: "",
+    email: String(created.data.email),
+    createdAt: String(created.data.created_at),
+    profileComplete: false,
+  } satisfies CustomerAccount;
+}
+
+export async function updateCustomerPhone(id: string, phone: string) {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("customer_accounts")
+      .update({ phone, updated_at: now() })
+      .eq("id", id)
+      .select("id, name, phone, email, created_at")
+      .single();
+    if (error) throw new Error("Não foi possível salvar seu telefone.");
+    return {
+      id: String(data.id),
+      name: String(data.name),
+      phone: String(data.phone),
+      email: String(data.email),
+      createdAt: String(data.created_at),
+      profileComplete: true,
+    } satisfies CustomerAccount;
+  }
+  await ensureLocalCommerceLoaded();
+  const account = memory.customerAccounts.find((candidate) => candidate.id === id);
+  if (!account) throw new Error("Conta não encontrada.");
+  account.phone = phone;
+  account.profileComplete = true;
+  await persistLocalCommerce();
+  return deepCopy(publicCustomer(account));
+}
+
+export async function createOrder(input: CheckoutInput, customerId: string): Promise<{ order: Order; trackingToken: string }> {
   const catalog = await getCatalog();
   const quote = createQuote(input, catalog);
   if (input.paymentMethod === "pix" && !catalog.pixConfigured) {
@@ -138,6 +461,7 @@ export async function createOrder(input: CheckoutInput): Promise<{ order: Order;
   const paymentStatus: PaymentStatus = input.paymentMethod === "pix" ? "pending" : "not_required";
   const order: Order = {
     id,
+    customerId,
     publicCode: newPublicCode(),
     version: 1,
     createdAt: timestamp,
@@ -183,6 +507,7 @@ export async function createOrder(input: CheckoutInput): Promise<{ order: Order;
       total_cents: quote.totalCents,
       version: order.version,
       tracking_token_hash: hashTrackingToken(trackingToken),
+      customer_id: customerId,
       payment_data: order.payment ?? null,
     });
     if (error) throw new Error("Não foi possível salvar seu pedido. Tente novamente em instantes.");
@@ -206,7 +531,10 @@ export async function createOrder(input: CheckoutInput): Promise<{ order: Order;
       actor: "customer",
     });
   } else {
+    await ensureLocalCommerceLoaded();
     memory.orders.unshift(order);
+    memory.trackingHashes[order.id] = hashTrackingToken(trackingToken);
+    await persistLocalCommerce();
   }
 
   return { order: deepCopy(order), trackingToken };
@@ -215,8 +543,10 @@ export async function createOrder(input: CheckoutInput): Promise<{ order: Order;
 function mapRemoteOrder(row: Record<string, unknown>): Order {
   const lineRows = Array.isArray(row.order_items) ? row.order_items : [];
   const events = Array.isArray(row.order_events) ? row.order_events : [];
+  const printJobs = Array.isArray(row.print_jobs) ? row.print_jobs : [];
   return {
     id: String(row.id),
+    customerId: (row.customer_id as string | null) ?? undefined,
     publicCode: String(row.public_code),
     version: Number(row.version || 1),
     createdAt: String(row.created_at),
@@ -246,7 +576,7 @@ function mapRemoteOrder(row: Record<string, unknown>): Order {
       totalCents: Number(row.total_cents),
     },
     payment: (row.payment_data as Order["payment"]) ?? undefined,
-    printStatus: (row.print_status as Order["printStatus"]) ?? undefined,
+    printStatus: (printJobs[0] as { status?: Order["printStatus"] } | undefined)?.status,
     events: events.map((event) => ({
       at: String(event.created_at),
       from: event.from_status as OrderStatus | undefined,
@@ -257,20 +587,41 @@ function mapRemoteOrder(row: Record<string, unknown>): Order {
   };
 }
 
-export async function getOrder(publicCode: string, trackingToken?: string) {
+export async function getOrder(publicCode: string, trackingToken?: string, customerId?: string) {
+  if (!trackingToken && !customerId) return null;
   const db = getSupabase();
   if (db) {
     const query = db
       .from("orders")
-      .select("*, order_items(*), order_events(*)")
+      .select("*, order_items(*), order_events(*), print_jobs(status)")
       .eq("public_code", publicCode)
       .order("created_at", { referencedTable: "order_events", ascending: true });
     if (trackingToken) query.eq("tracking_token_hash", hashTrackingToken(trackingToken));
+    else query.eq("customer_id", customerId!);
     const { data, error } = await query.maybeSingle();
     if (error || !data) return null;
     return mapRemoteOrder(data as Record<string, unknown>);
   }
-  return memory.orders.find((order) => order.publicCode === publicCode) ?? null;
+  await ensureLocalCommerceLoaded();
+  return memory.orders.find((order) => order.publicCode === publicCode && (
+    customerId ? order.customerId === customerId : Boolean(trackingToken && memory.trackingHashes[order.id] === hashTrackingToken(trackingToken))
+  )) ?? null;
+}
+
+export async function listCustomerOrders(customerId: string) {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("orders")
+      .select("*, order_items(*), order_events(*), print_jobs(status)")
+      .eq("customer_id", customerId)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) throw new Error("Não foi possível carregar seus pedidos.");
+    return (data ?? []).map((row) => mapRemoteOrder(row as Record<string, unknown>));
+  }
+  await ensureLocalCommerceLoaded();
+  return deepCopy(memory.orders.filter((order) => order.customerId === customerId));
 }
 
 export async function listOrders() {
@@ -278,12 +629,13 @@ export async function listOrders() {
   if (db) {
     const { data, error } = await db
       .from("orders")
-      .select("*, order_items(*), order_events(*)")
+      .select("*, order_items(*), order_events(*), print_jobs(status)")
       .order("created_at", { ascending: false })
       .limit(100);
     if (error) throw new Error("Não foi possível carregar os pedidos.");
     return (data ?? []).map((row) => mapRemoteOrder(row as Record<string, unknown>));
   }
+  await ensureLocalCommerceLoaded();
   return deepCopy(memory.orders);
 }
 
@@ -324,10 +676,11 @@ export async function transitionOrder(
       actor: "admin",
     });
     if (target === "confirmed") {
-      await db.from("print_jobs").upsert({ order_id: id, kind: "kitchen", status: "queued", payload: ticketPayload(existing) });
+      await db.from("print_jobs").upsert(
+        { order_id: id, kind: "kitchen", status: "queued", payload: ticketPayload(existing), attempts: 0, error: null, completed_at: null },
+        { onConflict: "order_id,kind" },
+      );
     }
-    await queueWhatsApp(db, existing, target);
-    await sendWhatsAppStatus(existing, target).catch(() => undefined);
     return { ...existing, status: target, version: expectedVersion + 1, updatedAt, events: [...existing.events, event] };
   }
 
@@ -340,7 +693,7 @@ export async function transitionOrder(
     targetOrder.printStatus = "queued";
     memory.printJobs.push({ id: newOrderId(), orderId: id, status: "queued", attempts: 0 });
   }
-  await sendWhatsAppStatus(targetOrder, target).catch(() => undefined);
+  await persistLocalCommerce();
   return deepCopy(targetOrder);
 }
 
@@ -371,8 +724,12 @@ export async function savePixPayment(
     }
     return;
   }
+  await ensureLocalCommerceLoaded();
   const order = memory.orders.find((candidate) => candidate.id === orderId);
-  if (order) order.payment = payment;
+  if (order) {
+    order.payment = payment;
+    await persistLocalCommerce();
+  }
 }
 
 export async function updatePaymentStatus(orderId: string, paymentStatus: PaymentStatus, providerPaymentId?: string) {
@@ -388,18 +745,293 @@ export async function updatePaymentStatus(orderId: string, paymentStatus: Paymen
     }
     return;
   }
+  await ensureLocalCommerceLoaded();
   const order = memory.orders.find((candidate) => candidate.id === orderId);
   if (order) {
     order.paymentStatus = paymentStatus;
     order.updatedAt = now();
+    await persistLocalCommerce();
   }
 }
 
 type ProductSettingsUpdate = { isAvailable?: boolean; featured?: boolean };
 
-export async function updateProductSettings(id: string, update: ProductSettingsUpdate) {
-  const product = products.find((candidate) => candidate.id === id);
+function productIdFor(name: string) {
+  const slug = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48) || "produto";
+  return `${slug}-${randomUUID().slice(0, 8)}`;
+}
+
+async function assertProductInput(input: ProductInput, currentId?: string) {
+  const catalog = await getCatalog();
+  if (!catalog.categories.some((category) => category.id === input.categoryId)) throw new Error("Selecione uma categoria válida.");
+  if (input.featured && !catalog.products.some((product) => product.id === currentId && product.featured)) {
+    if (catalog.products.filter((product) => product.featured).length >= 5) throw new Error("O showcase aceita no máximo 5 produtos.");
+  }
+}
+
+export async function createProduct(input: ProductInput) {
+  await assertProductInput(input);
+  const id = productIdFor(input.name);
+  const fallbackImage = "/images/dogchef/hot-dog-tradicional.webp";
+  const db = getSupabase();
+  if (db) {
+    const { data: lastProduct } = await db.from("products").select("sort_order").order("sort_order", { ascending: false }).limit(1).maybeSingle();
+    const { error } = await db.from("products").insert({
+      id,
+      category_id: input.categoryId,
+      name: input.name.trim(),
+      description: input.description.trim(),
+      price_cents: input.priceCents,
+      emoji: "🌭",
+      image_url: fallbackImage,
+      is_available: input.isAvailable,
+      featured: input.featured,
+      highlight: input.highlight?.trim() || null,
+      showcase_order: input.featured ? 99 : 0,
+      prep_minutes: input.prepMinutes,
+      sort_order: Number(lastProduct?.sort_order ?? 0) + 1,
+    });
+    if (error) throw new Error("Não foi possível cadastrar o produto. Confira se as migrações do painel foram aplicadas.");
+  } else {
+    await ensureLocalCatalogLoaded();
+    products.push({
+      id,
+      categoryId: input.categoryId,
+      name: input.name.trim(),
+      description: input.description.trim(),
+      priceCents: input.priceCents,
+      emoji: "🌭",
+      imageUrl: fallbackImage,
+      images: [{ id: `seed-${id}`, url: fallbackImage, isMain: true, sortOrder: 0 }],
+      isAvailable: input.isAvailable,
+      featured: input.featured,
+      highlight: input.highlight?.trim() || undefined,
+      showcaseOrder: input.featured ? 99 : 0,
+      prepMinutes: input.prepMinutes,
+      optionGroups: [],
+    });
+    await persistLocalCatalog();
+  }
+  const product = (await getCatalog()).products.find((candidate) => candidate.id === id);
+  if (!product) throw new Error("Produto cadastrado, mas não foi possível recarregá-lo.");
+  return product;
+}
+
+export async function updateProduct(id: string, input: ProductInput) {
+  await assertProductInput(input, id);
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db.from("products").update({
+      category_id: input.categoryId,
+      name: input.name.trim(),
+      description: input.description.trim(),
+      price_cents: input.priceCents,
+      prep_minutes: input.prepMinutes,
+      is_available: input.isAvailable,
+      featured: input.featured,
+      highlight: input.highlight?.trim() || null,
+    }).eq("id", id).select("id").maybeSingle();
+    if (error) throw new Error("Não foi possível salvar o produto.");
+    if (!data) throw new Error("Produto não encontrado.");
+  } else {
+    await ensureLocalCatalogLoaded();
+    const product = products.find((candidate) => candidate.id === id);
+    if (!product) throw new Error("Produto não encontrado.");
+    Object.assign(product, {
+      categoryId: input.categoryId,
+      name: input.name.trim(),
+      description: input.description.trim(),
+      priceCents: input.priceCents,
+      prepMinutes: input.prepMinutes,
+      isAvailable: input.isAvailable,
+      featured: input.featured,
+      highlight: input.highlight?.trim() || undefined,
+    });
+    await persistLocalCatalog();
+  }
+  const product = (await getCatalog()).products.find((candidate) => candidate.id === id);
   if (!product) throw new Error("Produto não encontrado.");
+  return product;
+}
+
+export async function deleteProduct(id: string) {
+  const db = getSupabase();
+  if (db) {
+    const { data: product, error: productError } = await db.from("products").select("id").eq("id", id).maybeSingle();
+    if (productError || !product) throw new Error("Produto não encontrado.");
+    const { data: images } = await db.from("product_images").select("storage_path").eq("product_id", id);
+    await db.from("product_option_group_products").delete().eq("product_id", id);
+    const { error } = await db.from("products").delete().eq("id", id);
+    if (error) throw new Error("Não foi possível excluir o produto.");
+    const paths = (images ?? []).map((image) => String(image.storage_path || "")).filter(Boolean);
+    if (paths.length) await db.storage.from("product-images").remove(paths);
+    return;
+  }
+  await ensureLocalCatalogLoaded();
+  const index = products.findIndex((candidate) => candidate.id === id);
+  if (index < 0) throw new Error("Produto não encontrado.");
+  products.splice(index, 1);
+  await rm(path.join(process.cwd(), "public", "uploads", "products", id), { recursive: true, force: true });
+  await persistLocalCatalog();
+}
+
+function imageExtension(file: File) {
+  const extensions: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/avif": "avif",
+  };
+  return extensions[file.type] ?? "jpg";
+}
+
+export async function addProductImages(productId: string, files: File[]) {
+  if (!files.length) return [] as ProductImage[];
+  const db = getSupabase();
+  if (db) {
+    const { data: product, error: productError } = await db.from("products").select("id").eq("id", productId).maybeSingle();
+    if (productError || !product) throw new Error("Produto não encontrado.");
+    const { data: currentImages, error: imageError } = await db.from("product_images").select("id, sort_order").eq("product_id", productId).order("sort_order");
+    if (imageError) throw new Error("A galeria ainda não está configurada no banco.");
+    let nextOrder = (currentImages?.at(-1)?.sort_order ?? -1) + 1;
+    const added: ProductImage[] = [];
+    for (const file of files) {
+      const id = randomUUID();
+      const storagePath = `products/${productId}/${id}.${imageExtension(file)}`;
+      const { error: uploadError } = await db.storage.from("product-images").upload(storagePath, Buffer.from(await file.arrayBuffer()), {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (uploadError) throw new Error("Não foi possível enviar uma das fotos.");
+      const publicUrl = db.storage.from("product-images").getPublicUrl(storagePath).data.publicUrl;
+      const isMain = (currentImages?.length ?? 0) === 0 && added.length === 0;
+      const { error: insertError } = await db.from("product_images").insert({
+        id,
+        product_id: productId,
+        storage_path: storagePath,
+        public_url: publicUrl,
+        is_main: isMain,
+        sort_order: nextOrder,
+      });
+      if (insertError) {
+        await db.storage.from("product-images").remove([storagePath]);
+        throw new Error("A foto foi enviada, mas não pôde ser vinculada ao produto.");
+      }
+      added.push({ id, url: publicUrl, isMain, sortOrder: nextOrder });
+      nextOrder += 1;
+      if (isMain) await db.from("products").update({ image_url: publicUrl }).eq("id", productId);
+    }
+    return added;
+  }
+
+  await ensureLocalCatalogLoaded();
+  const product = products.find((candidate) => candidate.id === productId);
+  if (!product) throw new Error("Produto não encontrado.");
+  const directory = path.join(process.cwd(), "public", "uploads", "products", productId);
+  await mkdir(directory, { recursive: true });
+  const hasUploadedImage = product.images.some((image) => !image.id.startsWith("seed-"));
+  const added: ProductImage[] = [];
+  for (const [index, file] of files.entries()) {
+    const id = randomUUID();
+    const filename = `${id}.${imageExtension(file)}`;
+    await writeFile(path.join(directory, filename), Buffer.from(await file.arrayBuffer()));
+    const url = `/uploads/products/${productId}/${filename}`;
+    const isMain = !hasUploadedImage && index === 0;
+    if (isMain) product.images.forEach((image) => { image.isMain = false; });
+    const image = { id, url, isMain, sortOrder: product.images.length + index };
+    product.images.push(image);
+    added.push(image);
+    if (isMain) product.imageUrl = url;
+  }
+  await persistLocalCatalog();
+  return added;
+}
+
+export async function setMainProductImage(productId: string, imageId: string) {
+  const db = getSupabase();
+  if (db) {
+    const { data: image, error } = await db.from("product_images").select("id, public_url").eq("id", imageId).eq("product_id", productId).maybeSingle();
+    if (error || !image) throw new Error("Foto não encontrada.");
+    await db.from("product_images").update({ is_main: false }).eq("product_id", productId);
+    const { error: mainError } = await db.from("product_images").update({ is_main: true }).eq("id", imageId);
+    if (mainError) throw new Error("Não foi possível definir a foto principal.");
+    await db.from("products").update({ image_url: image.public_url }).eq("id", productId);
+    return;
+  }
+  await ensureLocalCatalogLoaded();
+  const product = products.find((candidate) => candidate.id === productId);
+  const image = product?.images.find((candidate) => candidate.id === imageId);
+  if (!product || !image) throw new Error("Foto não encontrada.");
+  product.images.forEach((candidate) => { candidate.isMain = candidate.id === imageId; });
+  product.imageUrl = image.url;
+  await persistLocalCatalog();
+}
+
+export async function deleteProductImage(productId: string, imageId: string) {
+  const fallbackImage = "/images/dogchef/hot-dog-tradicional.webp";
+  const db = getSupabase();
+  if (db) {
+    const { data: image, error } = await db.from("product_images").select("id, storage_path, is_main").eq("id", imageId).eq("product_id", productId).maybeSingle();
+    if (error || !image) throw new Error("Foto não encontrada.");
+    const { error: deleteError } = await db.from("product_images").delete().eq("id", imageId);
+    if (deleteError) throw new Error("Não foi possível remover a foto.");
+    if (image.storage_path) await db.storage.from("product-images").remove([String(image.storage_path)]);
+    if (image.is_main) {
+      const { data: nextImage } = await db.from("product_images").select("id, public_url").eq("product_id", productId).order("sort_order").limit(1).maybeSingle();
+      if (nextImage) {
+        await db.from("product_images").update({ is_main: true }).eq("id", nextImage.id);
+        await db.from("products").update({ image_url: nextImage.public_url }).eq("id", productId);
+      } else {
+        await db.from("products").update({ image_url: fallbackImage }).eq("id", productId);
+      }
+    }
+    return;
+  }
+  await ensureLocalCatalogLoaded();
+  const product = products.find((candidate) => candidate.id === productId);
+  const image = product?.images.find((candidate) => candidate.id === imageId);
+  if (!product || !image) throw new Error("Foto não encontrada.");
+  product.images = product.images.filter((candidate) => candidate.id !== imageId);
+  if (image.url.startsWith("/uploads/products/")) {
+    await unlink(path.join(process.cwd(), "public", image.url)).catch(() => undefined);
+  }
+  if (!product.images.length) product.images = [{ id: `seed-${productId}`, url: fallbackImage, isMain: true, sortOrder: 0 }];
+  if (image.isMain || !product.images.some((candidate) => candidate.isMain)) {
+    product.images.forEach((candidate, index) => { candidate.isMain = index === 0; });
+  }
+  product.imageUrl = product.images.find((candidate) => candidate.isMain)?.url ?? fallbackImage;
+  await persistLocalCatalog();
+}
+
+export async function updateShowcaseProducts(productIds: string[]) {
+  if (productIds.length > 5 || new Set(productIds).size !== productIds.length) throw new Error("Selecione até 5 produtos sem repetir itens.");
+  const catalog = await getCatalog();
+  if (productIds.some((id) => !catalog.products.some((product) => product.id === id && product.isAvailable))) {
+    throw new Error("O showcase aceita somente produtos ativos.");
+  }
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db.rpc("set_showcase_products", { p_product_ids: productIds });
+    if (error) throw new Error("Não foi possível salvar o showcase. Aplique a migração mais recente do banco.");
+  } else {
+    await ensureLocalCatalogLoaded();
+    products.forEach((product) => {
+      const index = productIds.indexOf(product.id);
+      product.featured = index >= 0;
+      product.showcaseOrder = index >= 0 ? index : 0;
+    });
+    await persistLocalCatalog();
+  }
+  return productIds;
+}
+
+export async function updateProductSettings(id: string, update: ProductSettingsUpdate) {
   const db = getSupabase();
   if (db) {
     const { data: storedProduct, error: productError } = await db
@@ -418,16 +1050,28 @@ export async function updateProductSettings(id: string, update: ProductSettingsU
       if (countError) throw new Error("Não foi possível consultar os destaques do banner.");
       if ((count ?? 0) >= 5) throw new Error("O banner aceita no máximo 5 produtos.");
     }
-    const payload: Record<string, boolean> = {};
+    const payload: Record<string, boolean | number> = {};
     if (typeof update.isAvailable === "boolean") payload.is_available = update.isAvailable;
-    if (typeof update.featured === "boolean") payload.featured = update.featured;
+    if (typeof update.featured === "boolean") {
+      payload.featured = update.featured;
+      if (update.featured) payload.showcase_order = 99;
+    }
     const { error } = await db.from("products").update(payload).eq("id", id);
     if (error) throw new Error("Não foi possível atualizar o produto.");
-  } else if (update.featured === true && !product.featured && products.filter((item) => item.featured).length >= 5) {
-    throw new Error("O banner aceita no máximo 5 produtos.");
+    const product = (await getCatalog()).products.find((candidate) => candidate.id === id);
+    if (!product) throw new Error("Produto não encontrado.");
+    return product;
   }
+  await ensureLocalCatalogLoaded();
+  const product = products.find((candidate) => candidate.id === id);
+  if (!product) throw new Error("Produto não encontrado.");
+  if (update.featured === true && !product.featured && products.filter((item) => item.featured).length >= 5) throw new Error("O banner aceita no máximo 5 produtos.");
   if (typeof update.isAvailable === "boolean") product.isAvailable = update.isAvailable;
-  if (typeof update.featured === "boolean") product.featured = update.featured;
+  if (typeof update.featured === "boolean") {
+    product.featured = update.featured;
+    if (update.featured) product.showcaseOrder = 99;
+  }
+  await persistLocalCatalog();
   return product;
 }
 
@@ -441,6 +1085,93 @@ export async function updateStoreAcceptingOrders(acceptingOrders: boolean) {
   }
   memory.acceptingOrders = acceptingOrders;
   return { acceptingOrders };
+}
+
+export async function updateDefaultDeliveryFee(defaultDeliveryFeeCents: number) {
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db
+      .from("store_settings")
+      .upsert({ id: true, default_delivery_fee_cents: defaultDeliveryFeeCents, updated_at: now() });
+    if (error) throw new Error("Não foi possível atualizar a taxa padrão de entrega.");
+  }
+  memory.defaultDeliveryFeeCents = defaultDeliveryFeeCents;
+  return { defaultDeliveryFeeCents };
+}
+
+export async function createDeliveryZoneOverride(name: string, feeCents: number) {
+  const cleanName = name.trim();
+  const normalizedName = normalizeNeighborhood(cleanName);
+  const catalog = await getCatalog();
+  if (catalog.deliveryZones.some((zone) => zone.aliases.some((alias) => normalizeNeighborhood(alias) === normalizedName))) {
+    throw new Error("Esse bairro já possui uma taxa diferenciada.");
+  }
+  const zone: DeliveryZone = {
+    id: `bairro-${newOrderId()}`,
+    name: cleanName,
+    aliases: [cleanName],
+    feeCents,
+    minimumOrderCents: 0,
+    isAvailable: true,
+  };
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db.from("delivery_zones").insert({
+      id: zone.id,
+      name: zone.name,
+      aliases: zone.aliases,
+      fee_cents: zone.feeCents,
+      minimum_order_cents: 0,
+      is_available: true,
+    });
+    if (error) throw new Error("Não foi possível cadastrar a taxa desse bairro.");
+  } else {
+    memory.deliveryZones.push(zone);
+  }
+  return zone;
+}
+
+export async function updateDeliveryZoneOverride(id: string, name: string, feeCents: number) {
+  const cleanName = name.trim();
+  const normalizedName = normalizeNeighborhood(cleanName);
+  const catalog = await getCatalog();
+  const existing = catalog.deliveryZones.find((zone) => zone.id === id);
+  if (!existing) throw new Error("Bairro não encontrado.");
+  if (catalog.deliveryZones.some((zone) => zone.id !== id && zone.aliases.some((alias) => normalizeNeighborhood(alias) === normalizedName))) {
+    throw new Error("Outro bairro já utiliza esse nome.");
+  }
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db
+      .from("delivery_zones")
+      .update({ name: cleanName, aliases: [cleanName], fee_cents: feeCents })
+      .eq("id", id);
+    if (error) throw new Error("Não foi possível atualizar a taxa desse bairro.");
+  } else {
+    const memoryZone = memory.deliveryZones.find((zone) => zone.id === id)!;
+    memoryZone.name = cleanName;
+    memoryZone.aliases = [cleanName];
+    memoryZone.feeCents = feeCents;
+  }
+  return { ...existing, name: cleanName, aliases: [cleanName], feeCents };
+}
+
+export async function deleteDeliveryZoneOverride(id: string) {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("delivery_zones")
+      .update({ is_available: false })
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) throw new Error("Não foi possível excluir a taxa desse bairro.");
+  } else {
+    const index = memory.deliveryZones.findIndex((zone) => zone.id === id);
+    if (index < 0) throw new Error("Bairro não encontrado.");
+    memory.deliveryZones.splice(index, 1);
+  }
+  return { ok: true };
 }
 
 export async function updateWorkingHours(workingHours: WorkingHour[]) {
@@ -486,22 +1217,6 @@ function ticketPayload(order: Order) {
   };
 }
 
-async function queueWhatsApp(db: NonNullable<ReturnType<typeof getSupabase>>, order: Order, target: OrderStatus) {
-  if (!(["confirmed", "out_for_delivery"] as OrderStatus[]).includes(target)) return;
-  const dedupeKey = `whatsapp:${order.id}:${target}`;
-  await db.from("notification_outbox").upsert(
-    {
-      dedupe_key: dedupeKey,
-      order_id: order.id,
-      channel: "whatsapp",
-      event: target,
-      status: process.env.WHATSAPP_ACCESS_TOKEN ? "queued" : "simulated",
-      payload: { publicCode: order.publicCode, phoneLast4: order.customer.phone.slice(-4) },
-    },
-    { onConflict: "dedupe_key" },
-  );
-}
-
 export async function claimPrintJobs(agentId: string, limit = 1) {
   const db = getSupabase();
   if (db) {
@@ -532,23 +1247,78 @@ export async function claimPrintJobs(agentId: string, limit = 1) {
 export async function completePrintJob(jobId: string, leaseToken: string, result: "printed" | "failed", error?: string) {
   const db = getSupabase();
   if (db) {
-    const { data, error: updateError } = await db
+    const { data: leasedJob, error: leaseError } = await db
       .from("print_jobs")
-      .update({ status: result, lease_token: null, lease_expires_at: null, error: error ?? null, completed_at: now() })
+      .select("attempts")
       .eq("id", jobId)
       .eq("lease_token", leaseToken)
       .gt("lease_expires_at", now())
+      .maybeSingle();
+    if (leaseError || !leasedJob) throw new Error("A reserva do trabalho de impressão expirou.");
+    const nextStatus = result === "printed" ? "printed" : Number(leasedJob.attempts) >= MAX_PRINT_ATTEMPTS ? "dead" : "queued";
+    const { data, error: updateError } = await db
+      .from("print_jobs")
+      .update({
+        status: nextStatus,
+        lease_token: null,
+        lease_expires_at: null,
+        error: error ?? null,
+        completed_at: result === "printed" ? now() : null,
+      })
+      .eq("id", jobId)
+      .eq("lease_token", leaseToken)
       .select("id")
       .maybeSingle();
     if (updateError || !data) throw new Error("A reserva do trabalho de impressão expirou.");
-    return { ok: true, error };
+    return { ok: true, status: nextStatus, error };
   }
   const job = memory.printJobs.find((candidate) => candidate.id === jobId);
   if (!job || job.leaseToken !== leaseToken || (job.leaseExpiresAt ?? 0) < Date.now()) {
     throw new Error("A reserva do trabalho de impressão expirou.");
   }
-  job.status = result;
+  job.status = result === "printed" ? "printed" : job.attempts >= MAX_PRINT_ATTEMPTS ? "dead" : "queued";
   const order = memory.orders.find((candidate) => candidate.id === job.orderId);
-  if (order) order.printStatus = result === "printed" ? "printed" : "failed";
-  return { ok: true, error };
+  if (order) order.printStatus = job.status;
+  return { ok: true, status: job.status, error };
+}
+
+export async function requeuePrintJob(orderId: string) {
+  const order = (await listOrders()).find((candidate) => candidate.id === orderId);
+  if (!order) throw new Error("Pedido não encontrado.");
+  if (!["confirmed", "preparing", "out_for_delivery", "delivered"].includes(order.status)) {
+    throw new Error("O pedido precisa estar confirmado antes da impressão.");
+  }
+
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db.from("print_jobs").upsert(
+      {
+        order_id: orderId,
+        kind: "kitchen",
+        status: "queued",
+        payload: ticketPayload(order),
+        attempts: 0,
+        lease_token: null,
+        lease_expires_at: null,
+        completed_at: null,
+        error: null,
+      },
+      { onConflict: "order_id,kind" },
+    );
+    if (error) throw new Error("Não foi possível colocar o pedido na fila de impressão.");
+    return { status: "queued" as const };
+  }
+
+  const existing = memory.printJobs.find((candidate) => candidate.orderId === orderId);
+  if (existing) {
+    existing.status = "queued";
+    existing.attempts = 0;
+    existing.leaseToken = undefined;
+    existing.leaseExpiresAt = undefined;
+  } else {
+    memory.printJobs.push({ id: newOrderId(), orderId, status: "queued", attempts: 0 });
+  }
+  const memoryOrder = memory.orders.find((candidate) => candidate.id === orderId);
+  if (memoryOrder) memoryOrder.printStatus = "queued";
+  return { status: "queued" as const };
 }

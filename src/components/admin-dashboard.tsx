@@ -2,33 +2,53 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  ArrowDown,
+  ArrowUp,
   BellRing,
   Check,
   ChefHat,
   CircleAlert,
   ClipboardList,
+  Clock3,
+  ExternalLink,
+  GalleryHorizontal,
+  LayoutDashboard,
   LogOut,
+  MapPin,
+  Menu,
   Package,
+  Pencil,
+  Plus,
+  Power,
   Printer,
   RefreshCw,
+  Save,
+  Search,
+  Settings,
   Star,
+  Trash2,
   Truck,
   UtensilsCrossed,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 
+import { AdminProductEditor } from "@/components/admin-product-editor";
 import { formatCurrency } from "@/lib/money";
-import type { Catalog, Order, OrderStatus } from "@/lib/types";
+import type { Catalog, Order, OrderStatus, Product, WorkingHour } from "@/lib/types";
 
 type DashboardPayload = {
   orders: Order[];
   catalog: Catalog;
   databaseConfigured: boolean;
   adminConfigured: boolean;
-  integrations: { pix: string; whatsapp: string };
+  integrations: { pix: string; siteNotifications: string };
 };
+
+type AdminPanel = "dashboard" | "orders" | "products" | "showcase" | "settings" | "print";
+type ProductFilter = "all" | "active" | "paused" | "featured";
 
 const labels: Record<OrderStatus, string> = {
   pending_approval: "Novos",
@@ -38,6 +58,24 @@ const labels: Record<OrderStatus, string> = {
   delivered: "Concluídos",
   cancelled: "Cancelados",
 };
+
+const panelCopy: Record<AdminPanel, { title: string; subtitle: string }> = {
+  dashboard: { title: "Visão geral", subtitle: "O que precisa de atenção hoje" },
+  orders: { title: "Pedidos", subtitle: "Acompanhe a fila da cozinha" },
+  products: { title: "Produtos", subtitle: "Cadastre e organize o cardápio" },
+  showcase: { title: "Showcase", subtitle: "Escolha o banner da página inicial" },
+  settings: { title: "Configurações", subtitle: "Loja, horários e entrega" },
+  print: { title: "Impressão", subtitle: "Acompanhe a impressora térmica" },
+};
+
+const weekdays = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const printLabels = {
+  queued: "Na fila",
+  leased: "Imprimindo",
+  printed: "Impresso",
+  failed: "Nova tentativa",
+  dead: "Falha na impressão",
+} as const;
 
 const nextActions: Partial<Record<OrderStatus, { status: OrderStatus; label: string; icon: typeof Check }[]>> = {
   pending_approval: [
@@ -55,6 +93,15 @@ const nextActions: Partial<Record<OrderStatus, { status: OrderStatus; label: str
   out_for_delivery: [{ status: "delivered", label: "Marcar entregue", icon: Check }],
 };
 
+function feeInput(cents: number) {
+  return (cents / 100).toFixed(2);
+}
+
+function feeCents(value: string) {
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null;
+}
+
 function cardClass(status: OrderStatus) {
   return status.replaceAll("_", "-");
 }
@@ -62,9 +109,22 @@ function cardClass(status: OrderStatus) {
 export function AdminDashboard() {
   const router = useRouter();
   const [data, setData] = useState<DashboardPayload | null>(null);
+  const [activePanel, setActivePanel] = useState<AdminPanel>("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
+  const [hoursDraft, setHoursDraft] = useState<WorkingHour[] | null>(null);
+  const [defaultFeeDraft, setDefaultFeeDraft] = useState<string | null>(null);
+  const [newZoneName, setNewZoneName] = useState("");
+  const [newZoneFee, setNewZoneFee] = useState("");
+  const [zoneDrafts, setZoneDrafts] = useState<Record<string, { name: string; fee: string }>>({});
+  const [productSearch, setProductSearch] = useState("");
+  const [productFilter, setProductFilter] = useState<ProductFilter>("all");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const knownNewOrders = useRef(new Set<string>());
   const hasLoaded = useRef(false);
 
@@ -75,25 +135,40 @@ export function AdminDashboard() {
         router.replace("/admin/login");
         return;
       }
-      const payload = await response.json();
+      const payload = await response.json() as DashboardPayload & { error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o painel.");
-      const freshPending = payload.orders.filter(
-        (order: Order) => order.status === "pending_approval" && !knownNewOrders.current.has(order.id),
-      );
-      if (hasLoaded.current && freshPending.length && typeof AudioContext !== "undefined") {
-        const context = new AudioContext();
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.06;
-        oscillator.connect(gain);
-        gain.connect(context.destination);
-        oscillator.start();
-        oscillator.stop(context.currentTime + 0.18);
+      const freshPending = payload.orders.filter((order) => order.status === "pending_approval" && !knownNewOrders.current.has(order.id));
+      if (hasLoaded.current && freshPending.length) {
+        setNotice(freshPending.length === 1 ? `Novo pedido ${freshPending[0].publicCode} recebido.` : `${freshPending.length} novos pedidos recebidos.`);
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification("Novo pedido no Dog do Chef", {
+            body: freshPending.length === 1 ? `${freshPending[0].publicCode} · ${freshPending[0].customer.name}` : `${freshPending.length} pedidos aguardam confirmação.`,
+            icon: "/icon.svg",
+            tag: "dogchef-novos-pedidos",
+          });
+        }
+        if (typeof AudioContext !== "undefined") {
+          const context = new AudioContext();
+          const oscillator = context.createOscillator();
+          const gain = context.createGain();
+          oscillator.frequency.value = 880;
+          gain.gain.value = 0.06;
+          oscillator.connect(gain);
+          gain.connect(context.destination);
+          oscillator.start();
+          oscillator.stop(context.currentTime + 0.18);
+        }
       }
-      payload.orders.forEach((order: Order) => knownNewOrders.current.add(order.id));
+      payload.orders.forEach((order) => knownNewOrders.current.add(order.id));
       hasLoaded.current = true;
       setData(payload);
+      setEditingProduct((current) => current ? payload.catalog.products.find((product) => product.id === current.id) ?? null : null);
+      setHoursDraft((current) => current ?? payload.catalog.workingHours);
+      setDefaultFeeDraft((current) => current ?? feeInput(payload.catalog.defaultDeliveryFeeCents));
+      setZoneDrafts((current) => Object.fromEntries(payload.catalog.deliveryZones.map((zone) => [
+        zone.id,
+        current[zone.id] ?? { name: zone.name, fee: feeInput(zone.feeCents) },
+      ])));
       setError("");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Não foi possível carregar o painel.");
@@ -103,13 +178,46 @@ export function AdminDashboard() {
   }, [router]);
 
   useEffect(() => {
-    const initialLoad = window.setTimeout(() => void load(), 0);
+    const initialLoad = window.setTimeout(() => {
+      setAlertsEnabled(typeof Notification !== "undefined" && Notification.permission === "granted");
+      void load();
+    }, 0);
     const timer = window.setInterval(load, 8_000);
     return () => {
       window.clearTimeout(initialLoad);
       window.clearInterval(timer);
     };
   }, [load]);
+
+  async function openNotifications() {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      const permission = await Notification.requestPermission();
+      setAlertsEnabled(permission === "granted");
+      if (permission === "granted") setNotice("Avisos de novos pedidos ativados neste aparelho.");
+    }
+    openPanel("orders");
+  }
+
+  function openPanel(panel: AdminPanel) {
+    setActivePanel(panel);
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openNewProduct() {
+    setEditingProduct(null);
+    setEditorOpen(true);
+  }
+
+  function openProduct(product: Product) {
+    setEditingProduct(product);
+    setEditorOpen(true);
+  }
+
+  async function productSaved(message: string) {
+    setNotice(message);
+    await load();
+  }
 
   async function updateStatus(order: Order, status: OrderStatus) {
     setBusyId(order.id);
@@ -129,7 +237,7 @@ export function AdminDashboard() {
     }
   }
 
-  async function updateProduct(id: string, update: { isAvailable?: boolean; featured?: boolean }) {
+  async function updateProductSetting(id: string, update: { isAvailable?: boolean; featured?: boolean }) {
     setBusyId(id);
     try {
       const response = await fetch(`/api/v1/admin/products/${id}`, {
@@ -139,9 +247,174 @@ export function AdminDashboard() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível atualizar o produto.");
+      setNotice("Produto atualizado.");
       await load();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Não foi possível atualizar o produto.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function saveShowcase(productIds: string[]) {
+    setBusyId("showcase");
+    try {
+      const response = await fetch("/api/v1/admin/showcase", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productIds }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível salvar o showcase.");
+      setNotice("Showcase atualizado. A alteração já aparece na loja.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível salvar o showcase.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function updateAcceptingOrders(acceptingOrders: boolean) {
+    setBusyId("store-settings");
+    try {
+      const response = await fetch("/api/v1/admin/settings/accepting-orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acceptingOrders }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar a loja.");
+      setNotice(acceptingOrders ? "A loja voltou a receber pedidos." : "A loja foi pausada temporariamente.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível atualizar a loja.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  function updateHour(index: number, update: Partial<WorkingHour>) {
+    setHoursDraft((current) => current?.map((hour, hourIndex) => hourIndex === index ? { ...hour, ...update } : hour) ?? null);
+  }
+
+  async function saveWorkingHours() {
+    if (!hoursDraft) return;
+    setBusyId("working-hours");
+    try {
+      const response = await fetch("/api/v1/admin/working-hours", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workingHours: hoursDraft }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível salvar os horários.");
+      setHoursDraft(result.workingHours);
+      setNotice("Horários atualizados com sucesso.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível salvar os horários.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function reprintOrder(order: Order) {
+    setBusyId(`print-${order.id}`);
+    try {
+      const response = await fetch(`/api/v1/admin/orders/${order.id}/print`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível reenviar para impressão.");
+      setNotice(`Pedido ${order.publicCode} enviado para a fila de impressão.`);
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível reenviar para impressão.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function saveDefaultDeliveryFee() {
+    const cents = defaultFeeDraft === null ? null : feeCents(defaultFeeDraft);
+    if (cents === null) return setError("Informe uma taxa padrão válida.");
+    setBusyId("default-delivery-fee");
+    try {
+      const response = await fetch("/api/v1/admin/settings/delivery-fee", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ defaultDeliveryFeeCents: cents }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível salvar a taxa padrão.");
+      setDefaultFeeDraft(feeInput(result.defaultDeliveryFeeCents));
+      setNotice("Taxa padrão de entrega atualizada.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível salvar a taxa padrão.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function createDeliveryOverride() {
+    const cents = feeCents(newZoneFee);
+    if (newZoneName.trim().length < 2 || cents === null) return setError("Informe o bairro e uma taxa válida.");
+    setBusyId("new-delivery-zone");
+    try {
+      const response = await fetch("/api/v1/admin/delivery-zones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newZoneName, feeCents: cents }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível cadastrar o bairro.");
+      setNewZoneName("");
+      setNewZoneFee("");
+      setNotice("Bairro com taxa diferenciada cadastrado.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível cadastrar o bairro.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  function updateZoneDraft(id: string, update: Partial<{ name: string; fee: string }>) {
+    setZoneDrafts((current) => ({ ...current, [id]: { ...current[id], ...update } }));
+  }
+
+  async function saveDeliveryOverride(id: string) {
+    const draft = zoneDrafts[id];
+    const cents = draft ? feeCents(draft.fee) : null;
+    if (!draft || draft.name.trim().length < 2 || cents === null) return setError("Confira o nome do bairro e a taxa.");
+    setBusyId(`delivery-${id}`);
+    try {
+      const response = await fetch(`/api/v1/admin/delivery-zones/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: draft.name, feeCents: cents }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar o bairro.");
+      setNotice("Taxa diferenciada atualizada.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível atualizar o bairro.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function deleteDeliveryOverride(id: string) {
+    setBusyId(`delivery-${id}`);
+    try {
+      const response = await fetch(`/api/v1/admin/delivery-zones/${id}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível excluir o bairro.");
+      setNotice("Bairro removido. A taxa padrão será usada nele.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível excluir o bairro.");
     } finally {
       setBusyId("");
     }
@@ -152,90 +425,120 @@ export function AdminDashboard() {
     router.replace("/admin/login");
   }
 
-  if (loading && !data) {
-    return <main className="admin-shell"><div className="admin-loading"><span className="brand-mark"><ChefHat size={23}/></span><p>Abrindo a cozinha…</p></div></main>;
-  }
-  if (!data) {
-    return <main className="admin-shell"><div className="admin-loading"><CircleAlert size={32}/><p>{error || "Não foi possível abrir o painel."}</p><button className="button button-primary" onClick={() => void load()}>Tentar novamente</button></div></main>;
-  }
+  if (loading && !data) return <main className="admin-shell"><div className="admin-loading"><span className="brand-mark"><ChefHat size={23}/></span><p>Abrindo a cozinha...</p></div></main>;
+  if (!data) return <main className="admin-shell"><div className="admin-loading"><CircleAlert size={32}/><p>{error || "Não foi possível abrir o painel."}</p><button className="button button-primary" onClick={() => void load()}>Tentar novamente</button></div></main>;
 
   const operational = data.orders.filter((order) => !["delivered", "cancelled"].includes(order.status));
   const pending = data.orders.filter((order) => order.status === "pending_approval");
   const revenue = data.orders.filter((order) => order.status === "delivered").reduce((sum, order) => sum + order.quote.totalCents, 0);
-  const featuredCount = data.catalog.products.filter((product) => product.featured).length;
+  const featuredProducts = data.catalog.products.filter((product) => product.featured).sort((left, right) => left.showcaseOrder - right.showcaseOrder);
+  const featuredIds = featuredProducts.map((product) => product.id);
+  const printOrders = data.orders.filter((order) => order.printStatus).slice(0, 8);
+  const normalizedSearch = productSearch.trim().toLocaleLowerCase("pt-BR");
+  const filteredProducts = data.catalog.products.filter((product) => {
+    const matchesSearch = !normalizedSearch || `${product.name} ${product.description}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch);
+    const matchesFilter = productFilter === "all" || (productFilter === "active" && product.isAvailable) || (productFilter === "paused" && !product.isAvailable) || (productFilter === "featured" && product.featured);
+    return matchesSearch && matchesFilter;
+  });
+
+  const navItems: Array<{ id: AdminPanel; label: string; icon: typeof LayoutDashboard }> = [
+    { id: "dashboard", label: "Visão geral", icon: LayoutDashboard },
+    { id: "orders", label: "Pedidos", icon: ClipboardList },
+    { id: "products", label: "Produtos", icon: UtensilsCrossed },
+    { id: "showcase", label: "Showcase", icon: GalleryHorizontal },
+    { id: "settings", label: "Configurações", icon: Settings },
+    { id: "print", label: "Impressão", icon: Printer },
+  ];
+
+  function renderOrder(order: Order) {
+    return <article key={order.id} className={`kitchen-order ${cardClass(order.status)}`}>
+      <header><span className="order-code">{order.publicCode}</span><span className="status-chip">{labels[order.status]}</span></header>
+      <div className="order-customer"><b>{order.customer.name}</b><small>{order.deliveryType === "delivery" ? `Entrega · ${order.customer.address?.neighborhood || "endereço pendente"}` : "Retirada no balcão"}</small></div>
+      <ul>{order.quote.items.map((item, index) => <li key={`${item.productId}-${index}`}><b>{item.quantity}×</b><span>{item.productName}{item.optionals.length > 0 && <small>{item.optionals.map((option) => option.name).join(", ")}</small>}{item.note && <small>Obs.: {item.note}</small>}</span></li>)}</ul>
+      <footer><strong>{formatCurrency(order.quote.totalCents)}</strong><small>{order.paymentMethod === "pix" ? `Pix · ${order.paymentStatus}` : order.paymentMethod === "cash" ? "Dinheiro" : "Cartão"}</small></footer>
+      <div className="order-actions">{nextActions[order.status]?.filter((action) => order.deliveryType === "delivery" || action.status !== "out_for_delivery").map((action) => { const Icon = action.icon; return <button key={action.status} disabled={busyId === order.id} className={action.status === "cancelled" ? "secondary-danger" : "button button-dark"} onClick={() => void updateStatus(order, action.status)}><Icon size={16}/>{action.label}</button>; })}</div>
+    </article>;
+  }
 
   return (
-    <main className="admin-shell">
-      <aside className="admin-sidebar">
-        <div className="brand-lockup"><span className="brand-mark"><ChefHat size={23}/></span><span><strong>Dog do Chef</strong><small>central da cozinha</small></span></div>
-        <nav>
-          <a href="#orders"><ClipboardList size={18}/>Pedidos <b>{pending.length}</b></a>
-          <a href="#menu"><UtensilsCrossed size={18}/>Cardápio</a>
-          <a href="#print"><Printer size={18}/>Impressão</a>
-        </nav>
-        <div className="admin-sidebar-footer"><p><span className="dot"/>Operação online</p><button onClick={logout}><LogOut size={17}/>Sair</button></div>
+    <main className="admin-shell admin-manager">
+      <aside className={sidebarOpen ? "admin-sidebar is-open" : "admin-sidebar"}>
+        <div className="brand-lockup"><span className="brand-mark"><ChefHat size={23}/></span><span><strong>Dog do Chef</strong><small>Painel administrativo</small></span></div>
+        <nav>{navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={activePanel === item.id ? "is-active" : ""} onClick={() => openPanel(item.id)}><Icon size={18}/>{item.label}{item.id === "orders" && pending.length > 0 && <b>{pending.length}</b>}</button>; })}</nav>
+        <div className="admin-sidebar-footer"><p><span className={data.catalog.acceptingOrders ? "dot" : "dot paused"}/>{data.catalog.acceptingOrders ? "Recebendo pedidos" : "Loja pausada"}</p><button onClick={() => void logout()}><LogOut size={17}/>Sair</button></div>
       </aside>
+      {sidebarOpen && <button className="admin-sidebar-overlay" onClick={() => setSidebarOpen(false)} aria-label="Fechar menu"/>}
 
       <section className="admin-content">
         <header className="admin-topbar">
-          <div><p className="eyebrow">Central de operação</p><h1>Boa noite, Chef.</h1></div>
-          <div className="topbar-actions"><button className="icon-button" onClick={() => void load()} aria-label="Atualizar pedidos"><RefreshCw size={18}/></button><button className="icon-button notification" aria-label={`${pending.length} pedidos novos`}><BellRing size={19}/>{pending.length > 0 && <b className="cart-count">{pending.length}</b>}</button></div>
+          <div className="admin-title-group"><button className="admin-menu-button" onClick={() => setSidebarOpen(true)} aria-label="Abrir menu"><Menu size={21}/></button><div><p className="eyebrow">Central da cozinha</p><h1>{panelCopy[activePanel].title}</h1><small>{panelCopy[activePanel].subtitle}</small></div></div>
+          <div className="topbar-actions"><Link className="admin-back-store" href="/"><ExternalLink size={17}/><span>Voltar pro site</span></Link><button className="icon-button" onClick={() => void load()} aria-label="Atualizar painel" title="Atualizar"><RefreshCw size={18}/></button><button className={alertsEnabled ? "icon-button notification alerts-enabled" : "icon-button notification"} onClick={() => void openNotifications()} aria-label={alertsEnabled ? `${pending.length} pedidos novos; avisos ativados` : `${pending.length} pedidos novos; ativar avisos`} title={alertsEnabled ? "Avisos ativados" : "Ativar avisos de pedido"}><BellRing size={19}/>{pending.length > 0 && <b className="cart-count">{pending.length}</b>}</button></div>
         </header>
 
         {error && <p className="admin-error"><CircleAlert size={17}/>{error}<button onClick={() => setError("")} aria-label="Fechar aviso"><X size={15}/></button></p>}
-        {!data.databaseConfigured && <p className="config-banner"><CircleAlert size={18}/><span><b>Modo demonstração ativo.</b> Configure o projeto Supabase e as variáveis de ambiente antes de operar em produção.</span></p>}
+        {notice && <p className="admin-notice"><Check size={17}/>{notice}<button onClick={() => setNotice("")} aria-label="Fechar aviso"><X size={15}/></button></p>}
+        {!data.databaseConfigured && <p className="config-banner"><CircleAlert size={18}/><span><b>Modo demonstração ativo.</b> As alterações ficam nesta máquina. Configure o Supabase antes de publicar.</span></p>}
 
-        <div className="metrics">
-          <article><span>Pedidos em andamento</span><strong>{operational.length}</strong><small><span className="dot"/> {pending.length} aguardando ação</small></article>
-          <article><span>Faturamento concluído</span><strong>{formatCurrency(revenue)}</strong><small>pedidos entregues</small></article>
-          <article><span>Tempo médio estimado</span><strong>25 min</strong><small>atualizado pela cozinha</small></article>
-        </div>
+        {activePanel === "dashboard" && <div className="admin-panel-view">
+          <div className="metrics">
+            <article><span>Pedidos em andamento</span><strong>{operational.length}</strong><small><span className="dot"/> {pending.length} aguardando confirmação</small></article>
+            <article><span>Faturamento concluído</span><strong>{formatCurrency(revenue)}</strong><small>pedidos entregues</small></article>
+            <article><span>Produtos ativos</span><strong>{data.catalog.products.filter((product) => product.isAvailable).length}</strong><small>{data.catalog.products.length} cadastrados</small></article>
+          </div>
+          <section className="dashboard-shortcuts"><div className="section-heading"><div><p className="eyebrow">Acesso rápido</p><h2>O que deseja fazer?</h2></div></div><div className="shortcut-grid">
+            <button onClick={openNewProduct}><span><Plus size={22}/></span><b>Novo produto</b><small>Nome, preço e fotos</small></button>
+            <button onClick={() => openPanel("orders")}><span><ClipboardList size={22}/></span><b>Ver pedidos</b><small>{pending.length ? `${pending.length} esperando resposta` : "Fila atualizada"}</small></button>
+            <button onClick={() => openPanel("showcase")}><span><GalleryHorizontal size={22}/></span><b>Editar showcase</b><small>{featuredProducts.length} de 5 produtos</small></button>
+            <button onClick={() => openPanel("settings")}><span><Settings size={22}/></span><b>Configurações</b><small>Horários e entrega</small></button>
+          </div></section>
+          <div className="dashboard-columns">
+            <section className="dashboard-list-panel"><header><div><p className="eyebrow">Agora</p><h2>Pedidos recentes</h2></div><button onClick={() => openPanel("orders")}>Ver todos</button></header>{operational.length ? <div className="dashboard-mini-list">{operational.slice(0, 5).map((order) => <button key={order.id} onClick={() => openPanel("orders")}><span><b>{order.publicCode}</b><small>{order.customer.name}</small></span><em>{labels[order.status]}</em><strong>{formatCurrency(order.quote.totalCents)}</strong></button>)}</div> : <div className="dashboard-empty"><Package size={28}/><span>Nenhum pedido em andamento.</span></div>}</section>
+            <section className="dashboard-list-panel"><header><div><p className="eyebrow">Cardápio</p><h2>Produtos pausados</h2></div><button onClick={() => { setProductFilter("paused"); openPanel("products"); }}>Gerenciar</button></header>{data.catalog.products.some((product) => !product.isAvailable) ? <div className="dashboard-mini-list">{data.catalog.products.filter((product) => !product.isAvailable).slice(0, 5).map((product) => <button key={product.id} onClick={() => openProduct(product)}><span><b>{product.name}</b><small>{data.catalog.categories.find((category) => category.id === product.categoryId)?.name}</small></span><em>Pausado</em><strong>{formatCurrency(product.priceCents)}</strong></button>)}</div> : <div className="dashboard-empty"><Check size={28}/><span>Todos os produtos estão ativos.</span></div>}</section>
+          </div>
+        </div>}
 
-        <section id="orders" className="admin-section">
+        {activePanel === "orders" && <section className="admin-panel-view admin-section">
           <div className="section-heading"><div><p className="eyebrow">Fila de produção</p><h2>Pedidos que precisam de atenção</h2></div><span className="live-label"><span className="dot"/>atualiza a cada 8 s</span></div>
-          {operational.length === 0 ? (
-            <div className="kitchen-empty"><Package size={34}/><h3>Fila limpa por enquanto.</h3><p>Novos pedidos vão aparecer aqui e emitir um alerta sonoro.</p></div>
-          ) : (
-            <div className="order-grid">
-              {operational.map((order) => <article key={order.id} className={`kitchen-order ${cardClass(order.status)}`}>
-                <header><span className="order-code">{order.publicCode}</span><span className="status-chip">{labels[order.status]}</span></header>
-                <div className="order-customer"><b>{order.customer.name}</b><small>{order.deliveryType === "delivery" ? `Entrega · ${order.customer.address?.neighborhood || "endereço pendente"}` : "Retirada no balcão"}</small></div>
-                <ul>{order.quote.items.map((item, index) => <li key={`${item.productId}-${index}`}><b>{item.quantity}×</b><span>{item.productName}{item.optionals.length > 0 && <small>{item.optionals.map((option) => option.name).join(", ")}</small>}{item.note && <small>Obs.: {item.note}</small>}</span></li>)}</ul>
-                <footer><strong>{formatCurrency(order.quote.totalCents)}</strong><small>{order.paymentMethod === "pix" ? `Pix · ${order.paymentStatus}` : order.paymentMethod === "cash" ? "Dinheiro" : "Cartão"}</small></footer>
-                <div className="order-actions">{nextActions[order.status]?.map((action) => { const Icon = action.icon; return <button key={action.status} disabled={busyId === order.id} className={action.status === "cancelled" ? "secondary-danger" : "button button-dark"} onClick={() => void updateStatus(order, action.status)}><Icon size={16}/>{action.label}</button>; })}</div>
-              </article>)}
-            </div>
-          )}
-        </section>
+          {operational.length === 0 ? <div className="kitchen-empty"><Package size={34}/><h3>Fila limpa por enquanto.</h3><p>Novos pedidos aparecerão aqui e emitirão um alerta sonoro.</p></div> : <div className="order-grid">{operational.map(renderOrder)}</div>}
+        </section>}
 
-        <section id="menu" className="admin-section menu-management">
-          <div className="section-heading"><div><p className="eyebrow">Cardápio e destaques</p><h2>Controle rápido da loja</h2></div><span className="hours-status"><ClockIcon/> {data.catalog.hoursLabel}</span></div>
+        {activePanel === "products" && <section className="admin-panel-view">
+          <div className="admin-toolbar"><label className="admin-search"><Search size={18}/><input type="search" value={productSearch} onChange={(event) => setProductSearch(event.target.value)} placeholder="Buscar produto"/></label><div className="admin-segments">{([['all','Todos'],['active','Ativos'],['paused','Pausados'],['featured','Showcase']] as Array<[ProductFilter,string]>).map(([id,label]) => <button key={id} className={productFilter === id ? "is-active" : ""} onClick={() => setProductFilter(id)}>{label}</button>)}</div><button className="button button-dark" onClick={openNewProduct}><Plus size={16}/>Novo produto</button></div>
+          <p className="admin-results-count">{filteredProducts.length} {filteredProducts.length === 1 ? "produto encontrado" : "produtos encontrados"}</p>
+          <div className="admin-product-grid">{filteredProducts.map((product) => <article key={product.id} className={!product.isAvailable ? "is-paused" : ""}>
+            <div className="admin-product-photo"><Image src={product.imageUrl} alt="" fill sizes="(max-width: 619px) 100vw, (max-width: 1179px) 50vw, 25vw"/>{product.featured && <span><Star size={12} fill="currentColor"/>Showcase</span>}</div>
+            <div className="admin-product-card-body"><small>{data.catalog.categories.find((category) => category.id === product.categoryId)?.name}</small><h3>{product.name}</h3><p>{product.description || "Sem descrição cadastrada."}</p><strong>{formatCurrency(product.priceCents)}</strong></div>
+            <footer><button className="button button-ghost" onClick={() => openProduct(product)}><Pencil size={15}/>Editar</button><button className={product.isAvailable ? "availability on" : "availability"} disabled={busyId === product.id} onClick={() => void updateProductSetting(product.id, { isAvailable: !product.isAvailable })} aria-label={product.isAvailable ? `Pausar ${product.name}` : `Ativar ${product.name}`} title={product.isAvailable ? "Pausar produto" : "Ativar produto"}><span/></button></footer>
+          </article>)}</div>
+        </section>}
+
+        {activePanel === "showcase" && <section className="admin-panel-view showcase-manager">
+          <div className="showcase-intro"><div><GalleryHorizontal size={24}/><span><b>Banner da página inicial</b><small>Selecione até 5 produtos. A foto principal, nome, descrição e preço formam cada slide.</small></span></div><strong>{featuredProducts.length}/5</strong></div>
+          <div className="showcase-layout"><section><div className="section-heading compact"><div><p className="eyebrow">Ordem do banner</p><h2>Slides ativos</h2></div></div>{featuredProducts.length ? <div className="showcase-selected-list">{featuredProducts.map((product, index) => <article key={product.id}>
+            <span className="showcase-position">{index + 1}</span><div className="showcase-thumb"><Image src={product.imageUrl} alt="" width={56} height={44}/></div><div><b>{product.name}</b><small>{formatCurrency(product.priceCents)}</small></div><div className="showcase-row-actions"><button disabled={index === 0 || busyId === "showcase"} onClick={() => { const ids = [...featuredIds]; [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]; void saveShowcase(ids); }} aria-label="Mover para cima" title="Mover para cima"><ArrowUp size={15}/></button><button disabled={index === featuredProducts.length - 1 || busyId === "showcase"} onClick={() => { const ids = [...featuredIds]; [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]]; void saveShowcase(ids); }} aria-label="Mover para baixo" title="Mover para baixo"><ArrowDown size={15}/></button><button className="danger" disabled={busyId === "showcase"} onClick={() => void saveShowcase(featuredIds.filter((id) => id !== product.id))} aria-label="Remover do showcase" title="Remover"><Trash2 size={15}/></button></div>
+          </article>)}</div> : <div className="showcase-empty"><GalleryHorizontal size={32}/><b>O showcase está vazio.</b><span>Adicione um produto ativo na lista ao lado.</span></div>}</section>
+          <section><div className="section-heading compact"><div><p className="eyebrow">Estoque</p><h2>Adicionar produto</h2></div></div><div className="showcase-picker">{data.catalog.products.filter((product) => product.isAvailable && !product.featured).map((product) => <button key={product.id} disabled={featuredProducts.length >= 5 || busyId === "showcase"} onClick={() => void saveShowcase([...featuredIds, product.id])}><div><Image src={product.imageUrl} alt="" width={52} height={50}/></div><span><b>{product.name}</b><small>{formatCurrency(product.priceCents)}</small></span><Plus size={17}/></button>)}</div></section></div>
+        </section>}
+
+        {activePanel === "settings" && <section className="admin-panel-view settings-view">
           <div className="admin-settings">
-            <article><div><b>Recebimento de pedidos</b><small>A loja valida o horário cadastrado no checkout.</small></div><span className="setting-ready"><Check size={16}/>Horário ativo</span></article>
-            <article><div><b>Entregas por bairro</b><small>{data.catalog.deliveryZones.length} zonas ativas de frete fixo enquanto o Maps aguarda chave.</small></div><span className="setting-ready"><Check size={16}/>Fallback ativo</span></article>
-            <article><div><b>Banner da página inicial</b><small>Escolha até 5 produtos para alternar no banner.</small></div><span className="showcase-counter"><Star size={15}/>{featuredCount}/5</span></article>
+            <article><div><b>Recebimento de pedidos</b><small>{data.catalog.acceptingOrders ? "Clientes podem finalizar pedidos dentro do horário." : "Novos pedidos estão bloqueados temporariamente."}</small></div><button className={data.catalog.acceptingOrders ? "store-toggle is-open" : "store-toggle"} disabled={busyId === "store-settings"} onClick={() => void updateAcceptingOrders(!data.catalog.acceptingOrders)}><Power size={15}/>{data.catalog.acceptingOrders ? "Pausar loja" : "Abrir loja"}</button></article>
+            <article><div><b>Taxa de entrega</b><small>R$ {feeInput(data.catalog.defaultDeliveryFeeCents).replace(".", ",")} por padrão; {data.catalog.deliveryZones.length} {data.catalog.deliveryZones.length === 1 ? "exceção" : "exceções"}.</small></div><span className="setting-ready"><Check size={16}/>Regra ativa</span></article>
           </div>
-          <div className="product-switches">
-            {data.catalog.products.map((product) => <article key={product.id} className={product.featured ? "is-featured" : ""}>
-              <Image className="admin-product-image" src={product.imageUrl} alt="" width={52} height={52}/>
-              <div><b>{product.name}</b><small>{product.isAvailable ? "visível no cardápio" : "pausado no cardápio"}</small></div>
-              <div className="product-admin-actions">
-                <button className={product.featured ? "showcase-toggle is-active" : "showcase-toggle"} disabled={busyId === product.id || (!product.isAvailable && !product.featured)} onClick={() => void updateProduct(product.id, { featured: !product.featured })} aria-label={product.featured ? `Remover ${product.name} do banner` : `Adicionar ${product.name} ao banner`} title={product.featured ? "Remover do banner" : "Adicionar ao banner"}><Star size={16} fill={product.featured ? "currentColor" : "none"}/></button>
-                <button className={product.isAvailable ? "availability on" : "availability"} disabled={busyId === product.id} onClick={() => void updateProduct(product.id, { isAvailable: !product.isAvailable })} aria-label={product.isAvailable ? `Pausar ${product.name}` : `Ativar ${product.name}`} title={product.isAvailable ? "Pausar produto" : "Ativar produto"}><span/></button>
-              </div>
-            </article>)}
-          </div>
-        </section>
+          {hoursDraft && <div className="hours-editor"><div className="hours-editor-heading"><div><b>Dias e horários</b><small>O checkout bloqueia pedidos fora destes períodos.</small></div><button className="button button-dark" disabled={busyId === "working-hours"} onClick={() => void saveWorkingHours()}><Save size={15}/>{busyId === "working-hours" ? "Salvando..." : "Salvar horários"}</button></div><div className="hours-grid">{hoursDraft.map((hour, index) => <div className="hours-row" key={`${hour.weekday}-${hour.slot}`}><b>{weekdays[hour.weekday]}</b><label className="closed-toggle"><input type="checkbox" checked={hour.isClosed} onChange={(event) => updateHour(index, { isClosed: event.target.checked })}/><span>Fechado</span></label><label><span>Abre</span><input type="time" disabled={hour.isClosed} value={hour.opensAt.slice(0, 5)} onChange={(event) => updateHour(index, { opensAt: event.target.value })}/></label><label><span>Fecha</span><input type="time" disabled={hour.isClosed} value={hour.closesAt.slice(0, 5)} onChange={(event) => updateHour(index, { closesAt: event.target.value })}/></label></div>)}</div></div>}
+          <div className="delivery-editor"><div className="delivery-editor-heading"><div><b>Taxa padrão e exceções</b><small>Todo bairro usa a taxa padrão, exceto os cadastrados abaixo.</small></div><MapPin size={20}/></div><div className="default-fee-control"><label><span>Taxa padrão</span><div className="money-input"><span>R$</span><input type="number" min="0" step="0.01" value={defaultFeeDraft ?? ""} onChange={(event) => setDefaultFeeDraft(event.target.value)}/></div></label><button className="button button-dark" disabled={busyId === "default-delivery-fee"} onClick={() => void saveDefaultDeliveryFee()}><Save size={15}/>Salvar taxa</button></div><div className="delivery-override-form"><label><span>Novo bairro com valor diferente</span><input value={newZoneName} maxLength={80} placeholder="Nome do bairro" onChange={(event) => setNewZoneName(event.target.value)}/></label><label><span>Taxa</span><div className="money-input"><span>R$</span><input type="number" min="0" step="0.01" value={newZoneFee} placeholder="0,00" onChange={(event) => setNewZoneFee(event.target.value)}/></div></label><button className="button button-dark" disabled={busyId === "new-delivery-zone"} onClick={() => void createDeliveryOverride()}><Plus size={15}/>Adicionar</button></div>{data.catalog.deliveryZones.length > 0 ? <div className="delivery-overrides">{data.catalog.deliveryZones.map((zone) => <div className="delivery-override-row" key={zone.id}><input aria-label={`Nome do bairro ${zone.name}`} value={zoneDrafts[zone.id]?.name ?? zone.name} onChange={(event) => updateZoneDraft(zone.id, { name: event.target.value })}/><div className="money-input"><span>R$</span><input aria-label={`Taxa do bairro ${zone.name}`} type="number" min="0" step="0.01" value={zoneDrafts[zone.id]?.fee ?? feeInput(zone.feeCents)} onChange={(event) => updateZoneDraft(zone.id, { fee: event.target.value })}/></div><button className="icon-button" disabled={busyId === `delivery-${zone.id}`} onClick={() => void saveDeliveryOverride(zone.id)} aria-label={`Salvar ${zone.name}`} title="Salvar"><Save size={15}/></button><button className="icon-button danger" disabled={busyId === `delivery-${zone.id}`} onClick={() => void deleteDeliveryOverride(zone.id)} aria-label={`Excluir ${zone.name}`} title="Excluir"><Trash2 size={15}/></button></div>)}</div> : <p className="delivery-empty">Nenhuma exceção cadastrada. Todos os bairros usam a taxa padrão.</p>}</div>
+        </section>}
 
-        <section id="print" className="admin-section print-section">
+        {activePanel === "print" && <section className="admin-panel-view admin-section print-section">
           <div className="section-heading"><div><p className="eyebrow">Impressão térmica</p><h2>Agente local</h2></div><span className="integration-chip"><Printer size={15}/>aguardando instalação</span></div>
-          <div className="print-card"><Printer size={26}/><div><b>Conecte a impressora da cozinha</b><p>O agente Dog do Chef consulta com segurança a fila de impressão e envia tickets ESC/POS por rede ou compartilhamento USB.</p></div><code>npm run print-agent</code></div>
-        </section>
+          <div className="print-card"><Printer size={26}/><div><b>Conecte a impressora da cozinha</b><p>O agente tenta cada ticket até 5 vezes. Em caso de falha permanente, use a reimpressão manual abaixo.</p></div><code>npm run print-agent</code></div>
+          {printOrders.length > 0 && <div className="print-jobs">{printOrders.map((order) => <article key={order.id}><div><b>{order.publicCode}</b><small>{order.customer.name}</small></div><span className={`print-status ${order.printStatus}`}>{printLabels[order.printStatus!]}</span><button className="button button-dark" disabled={busyId === `print-${order.id}`} onClick={() => void reprintOrder(order)}><Printer size={14}/>{order.printStatus === "printed" ? "Reimprimir" : "Tentar novamente"}</button></article>)}</div>}
+        </section>}
       </section>
+
+      <nav className="admin-mobile-nav" aria-label="Navegação do painel">{navItems.slice(0, 5).map((item) => { const Icon = item.icon; return <button key={item.id} className={activePanel === item.id ? "is-active" : ""} onClick={() => openPanel(item.id)}><Icon size={19}/><span>{item.label === "Visão geral" ? "Início" : item.label}</span>{item.id === "orders" && pending.length > 0 && <b>{pending.length}</b>}</button>; })}</nav>
+
+      {editorOpen && <AdminProductEditor product={editingProduct} categories={data.catalog.categories} onClose={() => setEditorOpen(false)} onSaved={productSaved}/>}
     </main>
   );
-}
-
-function ClockIcon() {
-  return <span aria-hidden="true">◷</span>;
 }

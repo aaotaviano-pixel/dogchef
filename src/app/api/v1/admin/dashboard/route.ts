@@ -15,7 +15,7 @@ export async function GET(request: import("next/server").NextRequest) {
       adminConfigured: isAdminConfigured(),
       integrations: {
         pix: catalog.pixConfigured ? "configured" : "waiting",
-        whatsapp: catalog.whatsappConfigured ? "configured" : "simulation",
+        siteNotifications: "active",
       },
     },
     { headers: { "Cache-Control": "no-store" } },

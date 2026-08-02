@@ -10,32 +10,7 @@ export const defaultWorkingHours: WorkingHour[] = [
   { weekday: 6, slot: 1, opensAt: "18:00", closesAt: "23:30", isClosed: false },
 ];
 
-export const deliveryZones: DeliveryZone[] = [
-  {
-    id: "centro",
-    name: "Centro",
-    aliases: ["centro", "centro histórico"],
-    feeCents: 400,
-    minimumOrderCents: 2000,
-    isAvailable: true,
-  },
-  {
-    id: "jardins",
-    name: "Jardins",
-    aliases: ["jardins", "jardim", "vila nova"],
-    feeCents: 600,
-    minimumOrderCents: 2500,
-    isAvailable: true,
-  },
-  {
-    id: "santa-rita",
-    name: "Santa Rita",
-    aliases: ["santa rita", "são francisco", "sao francisco"],
-    feeCents: 800,
-    minimumOrderCents: 3000,
-    isAvailable: true,
-  },
-];
+export const deliveryZones: DeliveryZone[] = [];
 
 export const categories: Category[] = [
   { id: "tradicionais", name: "Tradicionais", description: "Os clássicos da Dog do Chef", sortOrder: 1 },
@@ -46,7 +21,7 @@ export const categories: Category[] = [
   { id: "bebidas", name: "Bebidas", description: "Geladas e naturais", sortOrder: 6 },
 ];
 
-const productDefinitions: Array<Omit<Product, "imageUrl">> = [
+const productDefinitions: Array<Omit<Product, "imageUrl" | "images" | "showcaseOrder">> = [
   {
     id: "tradicional-hot-dog-tradicional",
     categoryId: "tradicionais",
@@ -405,7 +380,7 @@ const productDefinitions: Array<Omit<Product, "imageUrl">> = [
   },
 ];
 
-function imageForProduct(product: Omit<Product, "imageUrl">) {
+function imageForProduct(product: Omit<Product, "imageUrl" | "images" | "showcaseOrder">) {
   if (product.categoryId === "dog-no-pote") return "/images/dogchef/dog-no-pote.webp";
   if (product.categoryId === "porcoes") return "/images/dogchef/batata-completa.webp";
   if (product.categoryId === "bebidas") return "/images/dogchef/bebidas.webp";
@@ -423,6 +398,8 @@ function imageForProduct(product: Omit<Product, "imageUrl">) {
 export const products: Product[] = productDefinitions.map((product) => ({
   ...product,
   imageUrl: imageForProduct(product),
+  images: [{ id: `seed-${product.id}`, url: imageForProduct(product), isMain: true, sortOrder: 0 }],
+  showcaseOrder: product.featured ? productDefinitions.filter((candidate) => candidate.featured).findIndex((candidate) => candidate.id === product.id) : 0,
 }));
 
 export function seededCatalog(): Catalog {
@@ -430,9 +407,13 @@ export function seededCatalog(): Catalog {
     categories,
     products,
     deliveryZones,
+    defaultDeliveryFeeCents: 800,
     acceptingOrders: true,
     pixConfigured: Boolean(process.env.MERCADO_PAGO_ACCESS_TOKEN),
-    whatsappConfigured: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
+    whatsappConfigured: Boolean(process.env.NEXT_PUBLIC_WHATSAPP_NUMBER),
+    whatsappUrl: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER
+      ? `https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER.replace(/\D/g, "")}`
+      : undefined,
     hoursLabel: "Ter–Dom · 18h às 23h30",
     workingHours: defaultWorkingHours,
   };

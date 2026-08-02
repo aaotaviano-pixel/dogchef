@@ -19,6 +19,7 @@ export type PaymentStatus =
   | "failed";
 export type PaymentMethod = "pix" | "cash" | "card";
 export type DeliveryType = "delivery" | "pickup";
+export type PrintStatus = "queued" | "leased" | "printed" | "failed" | "dead";
 
 export type Option = {
   id: string;
@@ -36,6 +37,13 @@ export type OptionGroup = {
   options: Option[];
 };
 
+export type ProductImage = {
+  id: string;
+  url: string;
+  isMain: boolean;
+  sortOrder: number;
+};
+
 export type Product = {
   id: string;
   categoryId: string;
@@ -44,11 +52,24 @@ export type Product = {
   priceCents: number;
   emoji: string;
   imageUrl: string;
+  images: ProductImage[];
   isAvailable: boolean;
   featured?: boolean;
   highlight?: string;
+  showcaseOrder: number;
   prepMinutes: number;
   optionGroups: OptionGroup[];
+};
+
+export type ProductInput = {
+  categoryId: string;
+  name: string;
+  description: string;
+  priceCents: number;
+  prepMinutes: number;
+  isAvailable: boolean;
+  featured: boolean;
+  highlight?: string;
 };
 
 export type Category = {
@@ -79,9 +100,11 @@ export type Catalog = {
   categories: Category[];
   products: Product[];
   deliveryZones: DeliveryZone[];
+  defaultDeliveryFeeCents: number;
   acceptingOrders: boolean;
   pixConfigured: boolean;
   whatsappConfigured: boolean;
+  whatsappUrl?: string;
   hoursLabel: string;
   workingHours: WorkingHour[];
 };
@@ -115,6 +138,15 @@ export type CheckoutInput = {
   items: CartLine[];
 };
 
+export type CustomerAccount = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  createdAt: string;
+  profileComplete: boolean;
+};
+
 export type PricedLine = {
   productId: string;
   productName: string;
@@ -135,6 +167,7 @@ export type Quote = {
 
 export type Order = {
   id: string;
+  customerId?: string;
   publicCode: string;
   version: number;
   createdAt: string;
@@ -156,7 +189,7 @@ export type Order = {
     expiresAt?: string;
     configurationRequired?: boolean;
   };
-  printStatus?: "queued" | "printed" | "failed";
+  printStatus?: PrintStatus;
   events: Array<{
     at: string;
     from?: OrderStatus;

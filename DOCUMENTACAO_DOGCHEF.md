@@ -64,10 +64,14 @@ O DogChef foi planejado como uma plataforma de pedidos para uma operacao de lanc
 - Pagamento via Pix, dinheiro ou cartao.
 - Acompanhamento publico do pedido por codigo.
 - Painel administrativo.
+- Gestao completa de produtos com cadastro, edicao, exclusao e galeria de fotos.
+- Showcase administravel com ate cinco produtos e ordem configuravel.
 - Controle de status do pedido.
 - Integracao com Mercado Pago para Pix.
 - Webhook de pagamento.
-- Integracao preparada com WhatsApp Cloud API.
+- Botao opcional de atendimento por WhatsApp, sem mensagens automaticas de pedido.
+- Login opcional com Google por Supabase Auth.
+- Avisos de status dentro do site e notificacoes do navegador mediante permissao.
 - Agente local para impressao termica ESC/POS.
 - Banco persistente via Supabase/PostgreSQL.
 
@@ -311,6 +315,13 @@ delivery
 pickup
 ```
 
+Regra da taxa de entrega:
+
+- Taxa padrao inicial de R$ 8,00 em `store_settings.default_delivery_fee_cents`.
+- Bairros ausentes em `delivery_zones` usam a taxa padrao.
+- `delivery_zones` contem apenas excecoes com valor diferente.
+- O painel permite alterar a taxa padrao e cadastrar, editar ou excluir excecoes.
+
 ## 12. Banco de dados
 
 O banco previsto e Supabase/PostgreSQL.
@@ -393,33 +404,27 @@ Endpoint de webhook:
 /api/v1/payments/webhook
 ```
 
-## 15. WhatsApp
+## 15. Atendimento e notificacoes
 
-O projeto tem integracao preparada com WhatsApp Cloud API.
+`NEXT_PUBLIC_WHATSAPP_NUMBER` libera somente o botao publico de atendimento. O fluxo de pedidos nao agenda nem envia mensagens automaticas pelo WhatsApp e nao depende de credenciais da Meta.
 
-Variaveis esperadas:
+As mudancas de status sao comunicadas no proprio site:
 
-```text
-WHATSAPP_ACCESS_TOKEN
-WHATSAPP_PHONE_NUMBER_ID
-WHATSAPP_TEMPLATE_NAME
-WHATSAPP_VERIFY_TOKEN
-WHATSAPP_APP_SECRET
-```
+- O painel administrativo consulta novos pedidos a cada 8 segundos, mostra contador e aviso visual, tenta emitir som e pode usar a notificacao do navegador quando autorizada.
+- Meus pedidos consulta mudancas a cada 8 segundos.
+- A pagina individual do pedido consulta mudancas a cada 10 segundos.
+- O cliente pode autorizar notificacoes do navegador. Elas exigem o site aberto ou em segundo plano e seguem as limitacoes do aparelho.
 
-Endpoint:
+O codigo legado da WhatsApp Cloud API permanece isolado para uma possivel decisao futura, mas nao e chamado pela transicao de pedidos.
 
-```text
-/api/v1/whatsapp/webhook
-```
+## 15.1 Login com Google
 
-Uso esperado:
+O acesso pelo Google usa Supabase Auth e aparece somente quando `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` estao configuradas. O retorno e validado no servidor antes da criacao da sessao interna.
 
-- Enviar mensagens transacionais.
-- Avisar mudancas de status.
-- Validar webhook da Meta.
-
-Sem credenciais, a integracao deve funcionar em modo simulado/fallback, sem envio real.
+- Contas existentes por senha sao vinculadas pelo mesmo e-mail verificado.
+- Contas novas pelo Google nao recebem senha ou telefone inventado.
+- O telefone e solicitado em Meus pedidos ou no primeiro checkout.
+- A migration `20260802181751_customer_google_auth.sql` torna telefone e hash opcionais somente quando existe um identificador autenticado.
 
 ## 16. Impressao termica
 
@@ -445,6 +450,8 @@ O agente:
 - Usa token proprio.
 - Reserva trabalhos de impressao.
 - Marca trabalhos como concluidos.
+- Tenta novamente falhas transitorias ate cinco vezes.
+- Permite reimpressao manual pelo painel.
 - Pode imprimir via TCP ou compartilhamento Windows.
 
 Variaveis principais:
@@ -475,7 +482,7 @@ Principais grupos:
 - Supabase privado: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`.
 - Supabase publico: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 - Pix: `MERCADO_PAGO_ACCESS_TOKEN`, `MERCADO_PAGO_WEBHOOK_SECRET`.
-- WhatsApp: variaveis da Meta.
+- WhatsApp: `NEXT_PUBLIC_WHATSAPP_NUMBER` somente para atendimento.
 - Google Maps: `GOOGLE_MAPS_API_KEY`.
 - Impressao: variaveis do agente.
 
@@ -483,7 +490,7 @@ Regra de seguranca:
 
 - Nunca versionar `.env.local`.
 - Nunca colocar `SUPABASE_SECRET_KEY` com prefixo `NEXT_PUBLIC_`.
-- Nunca expor token de Mercado Pago, Meta, Supabase secret ou senha admin no frontend.
+- Nunca expor token de Mercado Pago, segredo OAuth, Supabase secret ou senha admin no frontend.
 
 ## 18. Como rodar localmente
 
@@ -596,7 +603,7 @@ Com base na estrutura e arquivos encontrados, o projeto ja possui:
 - APIs de pedido.
 - APIs administrativas.
 - API de pagamento webhook.
-- API de WhatsApp webhook.
+- Codigo legado de webhook do WhatsApp, atualmente fora do fluxo automatico de pedidos.
 - API de agente de impressao.
 - Schema Supabase inicial.
 - Seed/catalogo inicial.
@@ -619,8 +626,8 @@ Antes de tratar como produto final, confirmar:
 - `ADMIN_SESSION_SECRET` forte definido.
 - Mercado Pago configurado, se Pix real for usado.
 - Webhook do Mercado Pago cadastrado.
-- WhatsApp Cloud API configurado, se envio real for usado.
-- Webhook do WhatsApp cadastrado.
+- Google OAuth configurado no Google Auth Platform e no Supabase, caso o botao seja ativado.
+- URLs `/auth/google` local e de producao permitidas no Supabase Auth.
 - Impressora testada com o agente local.
 - `PRINT_AGENT_TOKEN` criado e configurado tanto no site quanto no agente.
 - Build de producao aprovado com `npm run build`.
@@ -684,11 +691,11 @@ npm run print-agent
 
 ## 28. Resumo executivo
 
-DogChef e uma plataforma Next.js para pedidos de restaurante/lanchonete com painel admin, pedidos, pagamentos, WhatsApp, Supabase e impressao termica local.
+DogChef e uma plataforma Next.js para pedidos de restaurante/lanchonete com painel admin, contas de cliente, login opcional pelo Google, pagamentos, avisos no site, Supabase e impressao termica local.
 
 O codigo esta em `C:\DOGCHEF`.
 
-O projeto local existe, mas ainda nao estava conectado a Git nem a Vercel no momento desta verificacao.
+O repositorio local esta conectado ao GitHub em `aaotaviano-pixel/dogchef`. A publicacao deve continuar sendo conferida separadamente na conta correta da Vercel.
 
 Para virar operacao real, os pontos criticos sao:
 
@@ -700,4 +707,3 @@ Para virar operacao real, os pontos criticos sao:
 6. Configurar webhooks.
 7. Testar pedido completo.
 8. Testar impressao local.
-

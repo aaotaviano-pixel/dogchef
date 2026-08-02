@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { isAdminRequest } from "@/lib/auth";
 import { apiError, unauthorized } from "@/lib/http";
-import { updateProductSettings } from "@/lib/store";
+import { parseProductFormData } from "@/lib/product-admin";
+import { addProductImages, deleteProduct, getCatalog, updateProduct, updateProductSettings } from "@/lib/store";
 
 const schema = z.object({
   isAvailable: z.boolean().optional(),
@@ -22,5 +23,37 @@ export async function PATCH(request: import("next/server").NextRequest, context:
     return NextResponse.json({ product });
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Não foi possível atualizar o produto.", 422);
+  }
+}
+
+export async function PUT(request: import("next/server").NextRequest, context: { params: Promise<{ id: string }> }) {
+  if (!isAdminRequest(request)) return unauthorized();
+  const { id } = await context.params;
+  try {
+    const { input, files } = parseProductFormData(await request.formData());
+    const updated = await updateProduct(id, input);
+    let warning = "";
+    if (files.length) {
+      try {
+        await addProductImages(id, files);
+      } catch (error) {
+        warning = error instanceof Error ? `Produto salvo. ${error.message}` : "Produto salvo, mas as fotos não foram enviadas.";
+      }
+    }
+    const product = (await getCatalog()).products.find((candidate) => candidate.id === id) ?? updated;
+    return NextResponse.json({ product, warning });
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : "Não foi possível salvar o produto.", 422);
+  }
+}
+
+export async function DELETE(request: import("next/server").NextRequest, context: { params: Promise<{ id: string }> }) {
+  if (!isAdminRequest(request)) return unauthorized();
+  const { id } = await context.params;
+  try {
+    await deleteProduct(id);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : "Não foi possível excluir o produto.", 422);
   }
 }

@@ -14,6 +14,7 @@
 
 # Vercel
 .vercel
+supabase/.temp/
 
 # logs and local printing
 npm-debug.log*
@@ -22,6 +23,8 @@ pnpm-debug.log*
 tmp/
 agent/print-spool/
 agent/.env
+.data/
+/public/uploads/
 
 # OS/editor
 .DS_Store

@@ -1,13 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { checkoutSchema } from "@/lib/checkout";
+import { customerIdFromRequest } from "@/lib/customer-auth";
 import { createPixPayment } from "@/lib/integrations/mercado-pago";
 import { apiError } from "@/lib/http";
-import { createOrder, savePixPayment, updatePaymentStatus } from "@/lib/store";
+import { createOrder, getCustomerAccount, savePixPayment, updatePaymentStatus } from "@/lib/store";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const customerId = customerIdFromRequest(request);
+  if (!customerId) return apiError("Entre ou crie sua conta para finalizar o pedido.", 401);
+  const customer = await getCustomerAccount(customerId);
+  if (!customer) return apiError("Sua sessão expirou. Entre novamente.", 401);
   const body = await request.json().catch(() => null);
   const parsed = checkoutSchema.safeParse(body);
   if (!parsed.success) {
@@ -15,7 +20,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { order, trackingToken } = await createOrder(parsed.data);
+    const input = {
+      ...parsed.data,
+      customer: {
+        ...parsed.data.customer,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email,
+      },
+    };
+    const { order, trackingToken } = await createOrder(input, customer.id);
     let paymentError: string | undefined;
     if (order.paymentMethod === "pix") {
       try {
@@ -42,7 +56,7 @@ export async function POST(request: Request) {
       {
         order,
         trackingToken,
-        trackingUrl: `/pedido/${order.publicCode}?token=${encodeURIComponent(trackingToken)}`,
+        trackingUrl: `/pedido/${order.publicCode}`,
         paymentError,
       },
       { status: 201, headers: { "Cache-Control": "no-store" } },

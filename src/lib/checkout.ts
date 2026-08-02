@@ -91,12 +91,11 @@ export function createQuote(input: CheckoutInput, catalog: Catalog): Quote {
   if (input.deliveryType === "delivery") {
     if (!input.customer.address) throw new Error("Informe o endereço para entrega.");
     const zone = findDeliveryZone(input.customer.address.neighborhood, catalog.deliveryZones);
-    if (!zone) throw new Error("Ainda não entregamos nesse bairro. Escolha retirada ou fale conosco.");
-    if (subtotalCents < zone.minimumOrderCents) {
+    if (zone && subtotalCents < zone.minimumOrderCents) {
       throw new Error(`Pedido mínimo para ${zone.name}: R$ ${(zone.minimumOrderCents / 100).toFixed(2).replace(".", ",")}.`);
     }
-    deliveryFeeCents = zone.feeCents;
-    deliveryZone = zone.name;
+    deliveryFeeCents = zone?.feeCents ?? catalog.defaultDeliveryFeeCents;
+    deliveryZone = zone?.name;
   }
 
   return {
