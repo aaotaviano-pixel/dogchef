@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Camera, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Clock3, CreditCard, LogOut, MapPin, MessageCircle, Minus, Plus, ReceiptText, ShoppingBag, UserRound, X } from "lucide-react";
+import { ArrowLeft, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Clock3, CreditCard, LogOut, MapPin, Minus, Plus, ReceiptText, ShoppingBag, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { formatCurrency } from "@/lib/money";
 import { CustomerAccess } from "@/components/customer-access";
+import { InstagramLogo, WhatsAppLogo } from "@/components/social-icons";
 import type { CartLine, Catalog, CheckoutInput, CustomerAccount, Product } from "@/lib/types";
 
 const emptyCatalog: Catalog = {
   categories: [], products: [], deliveryZones: [], defaultDeliveryFeeCents: 800, acceptingOrders: false, pixConfigured: false, whatsappConfigured: false, hoursLabel: "Carregando…", workingHours: [],
 };
+
+const WHATSAPP_PENDING_URL = "https://wa.me/[PENDENTE-CLIENTE]";
 
 function linePrice(line: CartLine, catalog: Catalog) {
   const product = catalog.products.find((item) => item.id === line.productId);
@@ -23,6 +26,32 @@ function linePrice(line: CartLine, catalog: Catalog) {
 
 function defaultOptions(product: Product) {
   return product.optionGroups.flatMap((group) => group.options.filter((option) => option.isAvailable).slice(0, group.minSelections).map((option) => option.id));
+}
+
+function productVisualTreatment(product: Product) {
+  const text = `${product.name} ${product.description}`.toLocaleLowerCase("pt-BR");
+  if (text.includes("monstro")) return { tone: "monster", label: "Mais robusto" };
+  if ((product.categoryId === "tradicionais" || product.categoryId === "prensadoes") && text.includes("duplo")) return { tone: "double", label: "Duplo" };
+  if (product.categoryId === "dog-no-pote" && text.includes("bacon")) return { tone: "bacon", label: "Bacon" };
+  if (product.categoryId === "dog-no-pote" && text.includes("calabresa")) return { tone: "calabresa", label: "Calabresa" };
+  if (product.categoryId === "dog-no-pote" && text.includes("especial")) return { tone: "special", label: "Especial" };
+  if (product.categoryId === "dog-no-pote" && text.includes("simples")) return { tone: "simple", label: "Simples" };
+  if (product.categoryId === "porcoes" && text.includes("completa")) return { tone: "portion-complete", label: "Completa" };
+  if (product.categoryId === "porcoes" && text.includes("simples")) return { tone: "portion", label: "Simples" };
+  if (text.includes("alcatra") || text.includes("picanha")) return { tone: "grill", label: "Cortes nobres" };
+  if (text.includes("bacon")) return { tone: "bacon", label: "Bacon" };
+  if (text.includes("calabresa")) return { tone: "calabresa", label: "Calabresa" };
+  if (text.includes("catupiry") || text.includes("cheddar") || text.includes("mussarela")) return { tone: "cheese", label: "Queijos" };
+  if (product.categoryId === "combos") return { tone: "combo", label: "Combo" };
+  if (product.categoryId === "dog-no-pote" || text.includes("gratinado")) return { tone: "gratinado", label: "Gratinado" };
+  if (product.categoryId === "porcoes" || text.includes("porção")) return { tone: "portion", label: "Para compartilhar" };
+  if (product.categoryId === "bebidas" && text.includes("cerveja")) return { tone: "beer", label: "Cerveja" };
+  if (product.categoryId === "bebidas" && text.includes("suco")) return { tone: "juice", label: "Suco" };
+  if (product.categoryId === "bebidas" && text.includes("água")) return { tone: "water", label: "Água" };
+  if (product.categoryId === "bebidas" && (text.includes("refrigerante") || text.includes("coca-cola"))) return { tone: "soda", label: "Refrigerante" };
+  if (product.categoryId === "bebidas" || text.includes("refrigerante") || text.includes("suco") || text.includes("água")) return { tone: "drink", label: "Gelada" };
+  if (product.categoryId === "prensadoes") return { tone: "pressed", label: "Prensado" };
+  return { tone: "classic", label: "Clássico" };
 }
 
 export function Storefront() {
@@ -40,6 +69,8 @@ export function Storefront() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categoryCarouselPaused, setCategoryCarouselPaused] = useState(false);
+  const categoryPauseTimer = useRef<number | null>(null);
   const [form, setForm] = useState({
     name: "", phone: "", email: "", deliveryType: "delivery" as "delivery" | "pickup", paymentMethod: "cash" as "pix" | "cash" | "card",
     street: "", number: "", neighborhood: "", complement: "", reference: "",
@@ -50,10 +81,24 @@ export function Storefront() {
       .filter((product) => product.featured && product.isAvailable)
       .sort((left, right) => left.showcaseOrder - right.showcaseOrder)
       .slice(0, 5);
-    return featured.length ? featured : catalog.products.filter((product) => product.isAvailable).slice(0, 1);
+    return featured.length ? featured : catalog.products.filter((product) => product.isAvailable).slice(0, 5);
   }, [catalog.products]);
   const heroProduct = showcaseProducts.length ? showcaseProducts[heroIndex % showcaseProducts.length] : null;
   const featuredProducts = showcaseProducts.slice(0, 3);
+  const categoryTiles = useMemo(() => [
+    {
+      id: "all",
+      name: "Todos",
+      count: catalog.products.length,
+      cover: catalog.products.find((product) => product.isAvailable)?.imageUrl,
+    },
+    ...catalog.categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      count: catalog.products.filter((product) => product.categoryId === category.id).length,
+      cover: catalog.products.find((product) => product.categoryId === category.id && product.isAvailable)?.imageUrl,
+    })),
+  ], [catalog.categories, catalog.products]);
 
   useEffect(() => {
     const restoreReturnState = window.setTimeout(() => {
@@ -88,10 +133,14 @@ export function Storefront() {
   }, [cart]);
 
   useEffect(() => {
-    if (showcaseProducts.length < 2 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(() => setHeroIndex((current) => (current + 1) % showcaseProducts.length), 5_200);
+    if (showcaseProducts.length < 2) return;
+    const timer = window.setInterval(() => setHeroIndex((current) => (current + 1) % showcaseProducts.length), 4_800);
     return () => window.clearInterval(timer);
   }, [showcaseProducts.length]);
+
+  useEffect(() => () => {
+    if (categoryPauseTimer.current) window.clearTimeout(categoryPauseTimer.current);
+  }, []);
 
   useEffect(() => {
     const elements = Array.from(document.querySelectorAll<HTMLElement>(".dogchef-store .menu-reveal"));
@@ -122,6 +171,24 @@ export function Storefront() {
     setSelectedImageUrl(product.imageUrl);
     setSelectedOptions(defaultOptions(product));
     setNote("");
+  }
+
+  function selectCategory(categoryId: string) {
+    pauseCategoryCarousel();
+    setActiveCategory(categoryId);
+    window.setTimeout(() => {
+      const target = document.getElementById(categoryId === "all" ? "dogchef-menu-list" : `category-${categoryId}`);
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
+
+  function pauseCategoryCarousel() {
+    setCategoryCarouselPaused(true);
+    if (categoryPauseTimer.current) window.clearTimeout(categoryPauseTimer.current);
+    categoryPauseTimer.current = window.setTimeout(() => {
+      setCategoryCarouselPaused(false);
+      categoryPauseTimer.current = null;
+    }, 4_800);
   }
 
   function handleCustomerAuth(account: CustomerAccount) {
@@ -220,10 +287,10 @@ export function Storefront() {
   }
 
   return (
-    <main className="store-shell dogchef-store">
+    <main className={process.env.NEXT_PUBLIC_DOGCHEF_DARK_PREVIEW === "true" ? "store-shell dogchef-store theme-dark-preview" : "store-shell dogchef-store"}>
       <header className="store-header">
         <div className="brand-lockup"><span className="brand-mark"><ChefHat size={23}/></span><span><strong>Dog do Chef</strong><small>prensado feito na hora</small></span></div>
-        <div className="store-header-actions"><a className="icon-button" href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer" aria-label="Instagram da Dog do Chef" title="Instagram"><Camera size={19}/></a><button className="icon-button" aria-label={customer ? "Abrir minha conta" : "Entrar na minha conta"} onClick={() => setAccountOpen(true)}><UserRound size={19}/></button><button className="icon-button" aria-label="Abrir carrinho" onClick={() => setCartOpen(true)}><ShoppingBag size={20}/>{totalItems > 0 && <b className="cart-count">{totalItems}</b>}</button></div>
+        <div className="store-header-actions"><a className="icon-button instagram-header-button" href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer" aria-label="Instagram da Dog do Chef" title="Instagram"><InstagramLogo size={19}/></a><button className="icon-button" aria-label={customer ? "Abrir minha conta" : "Entrar na minha conta"} onClick={() => setAccountOpen(true)}><UserRound size={19}/></button><button className="icon-button" aria-label="Abrir carrinho" onClick={() => setCartOpen(true)}><ShoppingBag size={20}/>{totalItems > 0 && <b className="cart-count">{totalItems}</b>}</button></div>
       </header>
 
       <section className="hero dogchef-hero menu-reveal menu-reveal--title" aria-roledescription="carrossel" aria-label="Destaques do cardápio">
@@ -244,38 +311,49 @@ export function Storefront() {
 
       {featuredProducts.length > 0 && <section className="featured-section menu-reveal menu-reveal--title" aria-labelledby="featured-title">
         <header className="section-heading"><div><p className="eyebrow">Preferidos da casa</p><h2 id="featured-title">Destaques para pedir agora</h2></div></header>
-        <div className="featured-grid">{featuredProducts.map((product, index) => <article key={product.id} className={index === 0 ? "featured-card featured-card-main" : "featured-card featured-card-compact"}>
-          <button className="featured-card-media" onClick={() => openProduct(product)} aria-label={`Ver ${product.name}`}><Image src={product.imageUrl} alt={product.name} fill sizes={index === 0 ? "(max-width: 719px) 58vw, 520px" : "(max-width: 719px) 38vw, 260px"}/></button>
+        <div className="featured-grid">{featuredProducts.map((product, index) => { const visual = productVisualTreatment(product); return <article key={product.id} className={`${index === 0 ? "featured-card featured-card-main" : "featured-card featured-card-compact"} featured-card--${product.categoryId} featured-card--visual-${visual.tone}`}>
+          <button className="featured-card-media" onClick={() => openProduct(product)} aria-label={`Ver ${product.name}`}><Image src={product.imageUrl} alt={product.name} fill sizes={index === 0 ? "(max-width: 719px) 58vw, 520px" : "(max-width: 719px) 38vw, 260px"}/><span className="featured-visual-badge" aria-hidden="true">{visual.label}</span></button>
           <div><small>{product.highlight || "Destaque"}</small><h3>{product.name}</h3>{index === 0 && <p>{product.description}</p>}<footer><strong>{formatCurrency(product.priceCents)}</strong><button className="round-add" onClick={() => openProduct(product)} aria-label={`Adicionar ${product.name}`}><Plus size={17}/></button></footer></div>
-        </article>)}</div>
+        </article>; })}</div>
       </section>}
 
-      <section className="menu-section dogchef-menu">
+      <section className="menu-section dogchef-menu" id="dogchef-menu-list">
         <div className="section-heading menu-reveal menu-reveal--title"><div><p className="eyebrow">Nosso cardápio</p><h2>Escolha seu favorito</h2></div><span>{catalog.products.filter((product) => product.isAvailable).length} opções</span></div>
-        <nav className="category-scroller category-carousel" aria-label="Categorias">
-          <button className={activeCategory === "all" ? "category-tile active" : "category-tile"} onClick={() => setActiveCategory("all")}><span className="category-tile-icon"><ChefHat size={24}/></span><b>Todos</b><small>{catalog.products.length} itens</small></button>
-          {catalog.categories.map((category) => { const categoryProducts = catalog.products.filter((product) => product.categoryId === category.id); const cover = categoryProducts.find((product) => product.isAvailable)?.imageUrl; return <button key={category.id} className={activeCategory === category.id ? "category-tile active" : "category-tile"} onClick={() => setActiveCategory(category.id)}>{cover ? <span className="category-tile-image"><Image src={cover} alt="" fill sizes="86px"/></span> : <span className="category-tile-icon"><ChefHat size={24}/></span>}<b>{category.name}</b><small>{categoryProducts.length} itens</small></button>; })}
+        <nav className={categoryCarouselPaused ? "category-scroller category-carousel is-paused" : "category-scroller category-carousel"} aria-label="Categorias" onPointerDown={pauseCategoryCarousel} onWheel={pauseCategoryCarousel} onFocusCapture={pauseCategoryCarousel}>
+          <div className="category-carousel-viewport">
+            <div className="category-track">
+              {[0, 1].map((copy) => <div className="category-track-set" key={copy} aria-hidden={copy === 1}>
+                {categoryTiles.map((tile) => <button key={`${copy}-${tile.id}`} className={`category-tile category-tile--${tile.id} ${activeCategory === tile.id ? "active" : ""}`} onClick={() => selectCategory(tile.id)} aria-pressed={activeCategory === tile.id} tabIndex={copy === 1 ? -1 : undefined}>
+                  {tile.cover ? <span className="category-tile-image"><Image src={tile.cover} alt="" fill sizes="96px"/></span> : <span className="category-tile-icon"><ChefHat size={24}/></span>}
+                  <b>{tile.name}</b><small>{tile.count} itens</small>
+                </button>)}
+              </div>)}
+            </div>
+          </div>
         </nav>
         {visibleCategories.map((category) => {
           const categoryProducts = catalog.products.filter((product) => product.categoryId === category.id);
           return <section key={category.id} className="dogchef-menu-section" aria-labelledby={`category-${category.id}`}>
             <header className="dogchef-menu-section__header menu-reveal menu-reveal--title"><div><p className="eyebrow">{category.description}</p><h3 id={`category-${category.id}`}>{category.name}</h3></div><span>{categoryProducts.filter((product) => product.isAvailable).length} itens</span></header>
             <div className="product-grid">
-              {categoryProducts.map((product) => <article key={product.id} className={`product-card menu-reveal ${!product.isAvailable ? "unavailable" : ""}`}>
-                <div className="product-image"><Image src={product.imageUrl} alt={product.name} fill sizes="(max-width: 619px) 100vw, (max-width: 919px) 50vw, 33vw"/>{product.featured && <span className="pill">{product.highlight ?? "Destaque"}</span>}</div>
+              {categoryProducts.map((product) => { const visual = productVisualTreatment(product); return <article key={product.id} className={`product-card product-card--${product.categoryId} product-card--visual-${visual.tone} menu-reveal ${!product.isAvailable ? "unavailable" : ""}`}>
+                <div className={`product-image product-image--${product.categoryId} product-image--visual-${visual.tone}`}><span className="product-image-frame"><Image src={product.imageUrl} alt={product.name} fill sizes="(max-width: 619px) 100vw, (max-width: 919px) 50vw, 33vw"/></span><span className="product-visual-badge" aria-hidden="true">{visual.label}</span>{product.featured && <span className="pill">{product.highlight ?? "Destaque"}</span>}</div>
                 <div className="product-copy"><h3>{product.name}</h3>{product.description && <p>{product.description}</p>}</div>
                 <div className="product-bottom"><strong>{formatCurrency(product.priceCents)}</strong><button className="round-add" disabled={!product.isAvailable} onClick={() => openProduct(product)} aria-label={`Adicionar ${product.name}`}><Plus size={19}/></button></div>
                 {!product.isAvailable && <span className="sold-out">indisponível agora</span>}
-              </article>)}
+              </article>; })}
             </div>
           </section>;
         })}
       </section>
 
-      <footer className="store-footer"><div className="brand-lockup"><span className="brand-mark"><ChefHat size={20}/></span><span><strong>Dog do Chef</strong><small>prensado feito na hora</small></span></div><a href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer"><Camera size={17}/>@dogdochef_prensado</a><nav className="store-footer-links" aria-label="Informações da loja"><Link href="/politica-de-privacidade">Privacidade</Link><Link href="/termos-de-uso">Termos de uso</Link><Link className="admin-footer-link" href="/admin/login">Acesso administrativo</Link></nav></footer>
+      <footer className="store-footer"><div className="store-footer-brand"><div className="brand-lockup"><span className="brand-mark"><ChefHat size={20}/></span><span><strong>Dog do Chef</strong><small>prensado feito na hora</small></span></div><p>Feito na chapa, servido com cuidado e aquele sabor que dá vontade de voltar.</p></div><div className="store-footer-contact"><span>Fale com a gente</span><a href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer"><InstagramLogo size={17}/>@dogdochef_prensado</a><a className={catalog.whatsappConfigured ? "store-footer-whatsapp" : "store-footer-whatsapp is-pending"} href={catalog.whatsappUrl || WHATSAPP_PENDING_URL} target="_blank" rel="noreferrer" aria-label="Falar com a loja pelo WhatsApp" onClick={(event) => { if (!catalog.whatsappConfigured) event.preventDefault(); }}><WhatsAppLogo size={17}/>{catalog.whatsappConfigured ? "WhatsApp da loja" : "WhatsApp em configuração"}</a></div><nav className="store-footer-links" aria-label="Informações da loja"><Link href="/politica-de-privacidade">Privacidade</Link><Link href="/termos-de-uso">Termos de uso</Link></nav></footer>
 
       {totalItems > 0 && <button className="floating-cart" onClick={() => setCartOpen(true)}><span><ShoppingBag size={19}/>{totalItems} {totalItems === 1 ? "item" : "itens"}</span><strong>{formatCurrency(subtotal)}</strong></button>}
-      {catalog.whatsappUrl && <a className={totalItems > 0 ? "whatsapp-support with-cart" : "whatsapp-support"} href={catalog.whatsappUrl} target="_blank" rel="noreferrer" aria-label="Falar com a loja pelo WhatsApp"><MessageCircle size={19}/><span>Atendimento</span></a>}
+      <div className={totalItems > 0 ? "dogchef-social-stack with-cart" : "dogchef-social-stack"} aria-label="Canais da loja">
+        <a className="dogchef-social-button dogchef-social-button--instagram" href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer" aria-label="Instagram da Dog do Chef" title="Instagram"><InstagramLogo size={20}/></a>
+        <a className={!catalog.whatsappConfigured ? "dogchef-social-button dogchef-social-button--whatsapp is-pending" : "dogchef-social-button dogchef-social-button--whatsapp"} href={catalog.whatsappUrl || WHATSAPP_PENDING_URL} target="_blank" rel="noreferrer" aria-label="Falar com a loja pelo WhatsApp" title={catalog.whatsappConfigured ? "WhatsApp" : "WhatsApp aguardando número comercial"} onClick={(event) => { if (!catalog.whatsappConfigured) event.preventDefault(); }}><WhatsAppLogo size={21}/></a>
+      </div>
 
       {accountOpen && <div className="overlay" role="dialog" aria-modal="true" aria-label="Minha conta"><div className="bottom-sheet account-sheet"><button className="sheet-close" onClick={() => setAccountOpen(false)} aria-label="Fechar"><X size={21}/></button>{customer ? <div className="account-menu"><p className="eyebrow">Sua conta</p><h2>Olá, {customer.name.split(" ")[0]}</h2><p>{customer.email}</p>{!customer.profileComplete && <small className="account-profile-pending">Telefone pendente. Complete no checkout ou em Meus pedidos.</small>}<Link className="button button-primary full" href="/meus-pedidos"><ReceiptText size={17}/>Meus pedidos</Link><button className="button button-ghost full" onClick={logoutCustomer}><LogOut size={17}/>Sair da conta</button></div> : <CustomerAccess googleReturnTo="/?account=1" onAuthenticated={(account) => { handleCustomerAuth(account); setAccountOpen(false); }}/>}</div></div>}
 

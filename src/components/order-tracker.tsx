@@ -39,7 +39,7 @@ export function OrderTracker({ publicCode, token }: { publicCode: string; token:
             const message = `Pedido ${nextOrder.publicCode}: ${statusInfo[nextOrder.status].title}.`;
             setNotice(message);
             if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-              new Notification("Dog do Chef", { body: message, icon: "/icon.svg", tag: `pedido-${nextOrder.id}` });
+              new Notification("Dog do Chef", { body: message, icon: "/icon.png", tag: `pedido-${nextOrder.id}` });
             }
           }
           previousStatus.current = nextOrder.status;

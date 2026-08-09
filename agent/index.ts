@@ -12,6 +12,7 @@ import { promisify } from "node:util";
 
 type TicketLine = { productName: string; quantity: number; optionals: { name: string }[]; note?: string };
 type Ticket = {
+  printerId?: string;
   publicCode: string;
   createdAt: string;
   customerName: string;
@@ -23,6 +24,14 @@ type Ticket = {
   paymentMethod: string;
 };
 type Job = { id: string; leaseToken: string; payload: Ticket };
+type PrinterProfile = {
+  id: string;
+  name: string;
+  transport: "tcp" | "windows-share";
+  host?: string;
+  port?: number;
+  share?: string;
+};
 
 const execFileAsync = promisify(execFile);
 const agentDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +56,35 @@ function requireEnvironment(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`Variável obrigatória ausente: ${name}`);
   return value;
+}
+
+function printerProfiles(): PrinterProfile[] {
+  const raw = process.env.PRINTER_PROFILES_JSON?.trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((profile): profile is PrinterProfile => {
+      if (!profile || typeof profile !== "object") return false;
+      const value = profile as Record<string, unknown>;
+      return typeof value.id === "string" && typeof value.name === "string" && (value.transport === "tcp" || value.transport === "windows-share");
+    });
+  } catch {
+    throw new Error("PRINTER_PROFILES_JSON inválido.");
+  }
+}
+
+function selectedPrinter(ticket: Ticket): PrinterProfile {
+  const profile = printerProfiles().find((candidate) => candidate.id === ticket.printerId);
+  if (profile) return profile;
+  return {
+    id: ticket.printerId || "default",
+    name: "Impressora padrão",
+    transport: (process.env.PRINTER_TRANSPORT || "tcp").toLowerCase() === "windows-share" ? "windows-share" : "tcp",
+    host: process.env.PRINTER_HOST,
+    port: Number(process.env.PRINTER_PORT || "9100"),
+    share: process.env.PRINTER_SHARE,
+  };
 }
 
 function money(cents: number) {
@@ -82,9 +120,9 @@ function escpos(ticket: Ticket, jobId: string) {
   return Buffer.from(clean(content), "ascii");
 }
 
-async function printTcp(data: Buffer) {
-  const host = requireEnvironment("PRINTER_HOST");
-  const port = Number(process.env.PRINTER_PORT || "9100");
+async function printTcp(data: Buffer, profile: PrinterProfile) {
+  const host = profile.host || requireEnvironment("PRINTER_HOST");
+  const port = Number(profile.port || process.env.PRINTER_PORT || "9100");
   await new Promise<void>((resolve, reject) => {
     const socket = net.createConnection({ host, port });
     const timer = setTimeout(() => { socket.destroy(); reject(new Error("Tempo de conexão da impressora excedido.")); }, 8000);
@@ -97,9 +135,9 @@ async function printTcp(data: Buffer) {
   });
 }
 
-async function printWindowsShare(data: Buffer, jobId: string) {
+async function printWindowsShare(data: Buffer, jobId: string, profile: PrinterProfile) {
   if (process.platform !== "win32") throw new Error("O transporte USB/compartilhamento é suportado neste agente Windows.");
-  const share = requireEnvironment("PRINTER_SHARE");
+  const share = profile.share || requireEnvironment("PRINTER_SHARE");
   await mkdir(spoolDirectory, { recursive: true });
   const spoolFile = path.join(spoolDirectory, `${jobId}.bin`);
   await writeFile(spoolFile, data);
@@ -109,10 +147,11 @@ async function printWindowsShare(data: Buffer, jobId: string) {
 
 async function printTicket(ticket: Ticket, jobId: string) {
   const data = escpos(ticket, jobId);
-  if ((process.env.PRINTER_TRANSPORT || "tcp").toLowerCase() === "windows-share") {
-    await printWindowsShare(data, jobId);
+  const profile = selectedPrinter(ticket);
+  if (profile.transport === "windows-share") {
+    await printWindowsShare(data, jobId, profile);
   } else {
-    await printTcp(data);
+    await printTcp(data, profile);
   }
 }
 

@@ -53,7 +53,7 @@ export function CustomerOrders() {
           const message = `Pedido ${changed.publicCode}: ${statusLabels[changed.status]}.`;
           setNotice(message);
           if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-            new Notification("Dog do Chef", { body: message, icon: "/icon.svg", tag: `pedido-${changed.id}` });
+            new Notification("Dog do Chef", { body: message, icon: "/icon.png", tag: `pedido-${changed.id}` });
           }
         }
       }

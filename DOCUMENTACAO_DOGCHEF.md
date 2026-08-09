@@ -172,6 +172,9 @@ Rotas principais identificadas:
 ```text
 /
 /pedido/[publicCode]
+/meus-pedidos
+/auth/google
+/auth/reset-password
 /admin
 /admin/login
 ```
@@ -198,6 +201,11 @@ APIs identificadas:
 /api/v1/admin/products/[id]
 /api/v1/admin/settings/accepting-orders
 /api/v1/admin/working-hours
+/api/v1/customer/login
+/api/v1/customer/register
+/api/v1/customer/session
+/api/v1/customer/password/forgot
+/api/v1/customer/password/reset
 /api/v1/payments/webhook
 /api/v1/whatsapp/webhook
 /api/v1/print-agent/heartbeat
@@ -212,6 +220,9 @@ Leitura funcional:
 - `orders/[publicCode]`: consulta pedido publico.
 - `admin/*`: login, logout, painel e acoes administrativas.
 - `payments/webhook`: recebe confirmacoes do Mercado Pago.
+- `customer/password/forgot`: solicita recuperacao por e-mail sem revelar se o cadastro existe.
+- `customer/password/reset`: valida o token do Supabase Auth e atualiza o hash interno da conta.
+- `admin/showcase`: salva até cinco produtos ativos no banner; em bancos antigos, o fallback server-side evita a falha `UPDATE requires a WHERE clause` enquanto a migration corretiva é aplicada.
 - `whatsapp/webhook`: recebe eventos/verificacao da Meta.
 - `print-agent/*`: comunicacao do agente local de impressao.
 
@@ -628,6 +639,8 @@ Antes de tratar como produto final, confirmar:
 - Webhook do Mercado Pago cadastrado.
 - Google OAuth configurado no Google Auth Platform e no Supabase, caso o botao seja ativado.
 - URLs `/auth/google` local e de producao permitidas no Supabase Auth.
+- URLs `/auth/reset-password` local e de producao permitidas no Supabase Auth.
+- SMTP proprio configurado no Supabase para envio confiavel de recuperacao em producao.
 - Impressora testada com o agente local.
 - `PRINT_AGENT_TOKEN` criado e configurado tanto no site quanto no agente.
 - Build de producao aprovado com `npm run build`.
@@ -707,3 +720,9 @@ Para virar operacao real, os pontos criticos sao:
 6. Configurar webhooks.
 7. Testar pedido completo.
 8. Testar impressao local.
+
+## 29. Segundo cerebro e convencoes visuais
+
+Os registros curtos de manutencao do projeto ficam em `convencoes.md`, `arquitetura.md` e `historico.md`. A vitrine usa classes por categoria para diferenciar visualmente os cards sem alterar as fotos reais ou os dados do catalogo. O carrossel de categorias se move no desktop e pausa ao receber foco ou hover; no mobile permanece manual por toque.
+
+O reset de senha fica dividido entre `CustomerAccess`, `PasswordResetForm`, as rotas de API de senha e o Supabase Auth. O link recebido pelo cliente cria uma sessao temporaria no navegador; o servidor verifica o usuario pelo token antes de atualizar o hash interno.

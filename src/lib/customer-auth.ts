@@ -23,6 +23,15 @@ export const customerLoginSchema = z.object({
   password: z.string().min(1, "Informe sua senha.").max(72),
 });
 
+export const customerPasswordResetRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Informe um e-mail válido.").max(120),
+});
+
+export const customerPasswordUpdateSchema = z.object({
+  accessToken: z.string().trim().min(20).max(4096),
+  password: z.string().min(8, "A senha precisa ter pelo menos 8 caracteres.").max(72),
+});
+
 export const customerProfileSchema = z.object({
   phone: z.string().trim().min(10, "Informe um telefone válido.").max(20),
 });
@@ -95,6 +104,11 @@ export function normalizeCustomerEmail(email: string) {
 
 export function normalizeCustomerPhone(phone: string) {
   return phone.replace(/\D/g, "");
+}
+
+export function customerPasswordResetRedirect(origin: string) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || origin;
+  return new URL("/auth/reset-password", appUrl).toString();
 }
 
 export async function hashCustomerPassword(password: string) {

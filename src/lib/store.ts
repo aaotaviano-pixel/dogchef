@@ -5,9 +5,10 @@ import path from "node:path";
 import { createQuote } from "@/lib/checkout";
 import { canTransition, hashTrackingToken, newOrderId, newPublicCode, newTrackingToken } from "@/lib/orders";
 import { defaultWorkingHours, products, seededCatalog } from "@/lib/seed";
+import { configuredPrinterOptions, defaultPrinterId, isConfiguredPrinter } from "@/lib/printers";
 import { normalizeNeighborhood } from "@/lib/shop";
 import { getSupabase, hasSupabase } from "@/lib/supabase";
-import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, Product, ProductImage, ProductInput, WorkingHour } from "@/lib/types";
+import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, PrintSettings, Product, ProductImage, ProductInput, WorkingHour } from "@/lib/types";
 
 type PrintJob = {
   id: string;
@@ -16,6 +17,7 @@ type PrintJob = {
   leaseToken?: string;
   leaseExpiresAt?: number;
   attempts: number;
+  printerId?: string;
 };
 
 type StoredCustomerAccount = CustomerAccount & { passwordHash?: string; authUserId?: string };
@@ -31,6 +33,7 @@ const memory = {
   defaultDeliveryFeeCents: 800,
   deliveryZones: [] as DeliveryZone[],
   workingHours: deepCopy(defaultWorkingHours),
+  selectedPrinterId: defaultPrinterId(),
 };
 
 const localCatalogFile = path.join(process.cwd(), ".data", "catalog.json");
@@ -296,6 +299,65 @@ export async function findCustomerByEmail(email: string): Promise<StoredCustomer
   }
   await ensureLocalCommerceLoaded();
   return deepCopy(memory.customerAccounts.find((customer) => customer.email === email) ?? null);
+}
+
+export async function findCustomerByAuthUserId(authUserId: string): Promise<StoredCustomerAccount | null> {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("customer_accounts")
+      .select("id, name, phone, email, password_hash, auth_user_id, created_at")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      id: String(data.id),
+      name: String(data.name),
+      phone: data.phone ? String(data.phone) : "",
+      email: String(data.email),
+      passwordHash: data.password_hash ? String(data.password_hash) : undefined,
+      authUserId: data.auth_user_id ? String(data.auth_user_id) : undefined,
+      createdAt: String(data.created_at),
+      profileComplete: Boolean(data.phone),
+    };
+  }
+  await ensureLocalCommerceLoaded();
+  return deepCopy(memory.customerAccounts.find((customer) => customer.authUserId === authUserId) ?? null);
+}
+
+export async function linkCustomerAuthUser(id: string, authUserId: string) {
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db
+      .from("customer_accounts")
+      .update({ auth_user_id: authUserId, updated_at: now() })
+      .eq("id", id)
+      .is("auth_user_id", null);
+    if (error) throw new Error("Não foi possível preparar a recuperação da conta.");
+    return;
+  }
+  await ensureLocalCommerceLoaded();
+  const account = memory.customerAccounts.find((candidate) => candidate.id === id);
+  if (!account) throw new Error("Conta não encontrada.");
+  account.authUserId = authUserId;
+  await persistLocalCommerce();
+}
+
+export async function updateCustomerPassword(id: string, passwordHash: string) {
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db
+      .from("customer_accounts")
+      .update({ password_hash: passwordHash, updated_at: now() })
+      .eq("id", id);
+    if (error) throw new Error("Não foi possível atualizar a senha da conta.");
+    return;
+  }
+  await ensureLocalCommerceLoaded();
+  const account = memory.customerAccounts.find((candidate) => candidate.id === id);
+  if (!account) throw new Error("Conta não encontrada.");
+  account.passwordHash = passwordHash;
+  await persistLocalCommerce();
 }
 
 export async function getCustomerAccount(id: string): Promise<CustomerAccount | null> {
@@ -644,6 +706,7 @@ export async function transitionOrder(
   target: OrderStatus,
   expectedVersion: number,
   reason?: string,
+  printerId?: string,
 ) {
   const orders = await listOrders();
   const existing = orders.find((order) => order.id === id);
@@ -676,8 +739,9 @@ export async function transitionOrder(
       actor: "admin",
     });
     if (target === "confirmed") {
+      const selectedPrinterId = printerId && isConfiguredPrinter(printerId) ? printerId : defaultPrinterId();
       await db.from("print_jobs").upsert(
-        { order_id: id, kind: "kitchen", status: "queued", payload: ticketPayload(existing), attempts: 0, error: null, completed_at: null },
+        { order_id: id, kind: "kitchen", status: "queued", payload: ticketPayload(existing, selectedPrinterId), attempts: 0, error: null, completed_at: null },
         { onConflict: "order_id,kind" },
       );
     }
@@ -691,7 +755,7 @@ export async function transitionOrder(
   targetOrder.events.push(event);
   if (target === "confirmed") {
     targetOrder.printStatus = "queued";
-    memory.printJobs.push({ id: newOrderId(), orderId: id, status: "queued", attempts: 0 });
+    memory.printJobs.push({ id: newOrderId(), orderId: id, status: "queued", attempts: 0, printerId: printerId && isConfiguredPrinter(printerId) ? printerId : memory.selectedPrinterId });
   }
   await persistLocalCommerce();
   return deepCopy(targetOrder);
@@ -1018,7 +1082,20 @@ export async function updateShowcaseProducts(productIds: string[]) {
   const db = getSupabase();
   if (db) {
     const { error } = await db.rpc("set_showcase_products", { p_product_ids: productIds });
-    if (error) throw new Error("Não foi possível salvar o showcase. Aplique a migração mais recente do banco.");
+    if (error) {
+      // Keep older Supabase functions usable until the filtered migration is applied.
+      const { error: clearError } = await db
+        .from("products")
+        .update({ featured: false, showcase_order: 0 })
+        .eq("featured", true);
+      if (clearError) throw new Error("Não foi possível salvar o showcase. A migration do banco ou as permissões ainda precisam ser atualizadas.");
+
+      const updates = await Promise.all(productIds.map((id, index) => db
+        .from("products")
+        .update({ featured: true, showcase_order: index })
+        .eq("id", id)));
+      if (updates.some((result) => result.error)) throw new Error("Não foi possível concluir a atualização do showcase. Verifique a migration do banco.");
+    }
   } else {
     await ensureLocalCatalogLoaded();
     products.forEach((product) => {
@@ -1085,6 +1162,18 @@ export async function updateStoreAcceptingOrders(acceptingOrders: boolean) {
   }
   memory.acceptingOrders = acceptingOrders;
   return { acceptingOrders };
+}
+
+export async function getPrintSettings(): Promise<PrintSettings> {
+  const printers = configuredPrinterOptions();
+  const selectedPrinterId = isConfiguredPrinter(memory.selectedPrinterId) ? memory.selectedPrinterId : (printers[0]?.id ?? defaultPrinterId());
+  return { selectedPrinterId, printers };
+}
+
+export async function updateSelectedPrinter(selectedPrinterId: string) {
+  if (!isConfiguredPrinter(selectedPrinterId)) throw new Error("Selecione uma impressora configurada.");
+  memory.selectedPrinterId = selectedPrinterId;
+  return getPrintSettings();
 }
 
 export async function updateDefaultDeliveryFee(defaultDeliveryFeeCents: number) {
@@ -1203,8 +1292,9 @@ export async function updateWorkingHours(workingHours: WorkingHour[]) {
   return memory.workingHours;
 }
 
-function ticketPayload(order: Order) {
+function ticketPayload(order: Order, printerId?: string) {
   return {
+    printerId: printerId ?? defaultPrinterId(),
     publicCode: order.publicCode,
     createdAt: order.createdAt,
     customerName: order.customer.name,
@@ -1240,7 +1330,7 @@ export async function claimPrintJobs(agentId: string, limit = 1) {
     job.leaseExpiresAt = nowMillis + 60_000;
     job.attempts += 1;
     const order = memory.orders.find((candidate) => candidate.id === job.orderId)!;
-    return { id: job.id, leaseToken: job.leaseToken, leaseExpiresAt: new Date(job.leaseExpiresAt).toISOString(), agentId, payload: ticketPayload(order) };
+    return { id: job.id, leaseToken: job.leaseToken, leaseExpiresAt: new Date(job.leaseExpiresAt).toISOString(), agentId, payload: ticketPayload(order, job.printerId) };
   });
 }
 
@@ -1282,7 +1372,7 @@ export async function completePrintJob(jobId: string, leaseToken: string, result
   return { ok: true, status: job.status, error };
 }
 
-export async function requeuePrintJob(orderId: string) {
+export async function requeuePrintJob(orderId: string, printerId?: string) {
   const order = (await listOrders()).find((candidate) => candidate.id === orderId);
   if (!order) throw new Error("Pedido não encontrado.");
   if (!["confirmed", "preparing", "out_for_delivery", "delivered"].includes(order.status)) {
@@ -1291,12 +1381,13 @@ export async function requeuePrintJob(orderId: string) {
 
   const db = getSupabase();
   if (db) {
+    const selectedPrinterId = printerId && isConfiguredPrinter(printerId) ? printerId : defaultPrinterId();
     const { error } = await db.from("print_jobs").upsert(
       {
         order_id: orderId,
         kind: "kitchen",
         status: "queued",
-        payload: ticketPayload(order),
+        payload: ticketPayload(order, selectedPrinterId),
         attempts: 0,
         lease_token: null,
         lease_expires_at: null,
@@ -1315,8 +1406,9 @@ export async function requeuePrintJob(orderId: string) {
     existing.attempts = 0;
     existing.leaseToken = undefined;
     existing.leaseExpiresAt = undefined;
+    existing.printerId = printerId && isConfiguredPrinter(printerId) ? printerId : memory.selectedPrinterId;
   } else {
-    memory.printJobs.push({ id: newOrderId(), orderId, status: "queued", attempts: 0 });
+    memory.printJobs.push({ id: newOrderId(), orderId, status: "queued", attempts: 0, printerId: printerId && isConfiguredPrinter(printerId) ? printerId : memory.selectedPrinterId });
   }
   const memoryOrder = memory.orders.find((candidate) => candidate.id === orderId);
   if (memoryOrder) memoryOrder.printStatus = "queued";

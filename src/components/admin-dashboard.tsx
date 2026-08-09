@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,7 +37,7 @@ import {
 
 import { AdminProductEditor } from "@/components/admin-product-editor";
 import { formatCurrency } from "@/lib/money";
-import type { Catalog, Order, OrderStatus, Product, WorkingHour } from "@/lib/types";
+import type { Catalog, Order, OrderStatus, PrintSettings, Product, WorkingHour } from "@/lib/types";
 
 type DashboardPayload = {
   orders: Order[];
@@ -45,6 +45,7 @@ type DashboardPayload = {
   databaseConfigured: boolean;
   adminConfigured: boolean;
   integrations: { pix: string; siteNotifications: string };
+  print: PrintSettings;
 };
 
 type AdminPanel = "dashboard" | "orders" | "products" | "showcase" | "settings" | "print";
@@ -121,6 +122,9 @@ export function AdminDashboard() {
   const [newZoneName, setNewZoneName] = useState("");
   const [newZoneFee, setNewZoneFee] = useState("");
   const [zoneDrafts, setZoneDrafts] = useState<Record<string, { name: string; fee: string }>>({});
+  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [adminPasswordConfirmation, setAdminPasswordConfirmation] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [productFilter, setProductFilter] = useState<ProductFilter>("all");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -137,13 +141,15 @@ export function AdminDashboard() {
       }
       const payload = await response.json() as DashboardPayload & { error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o painel.");
+      const savedPrinterId = window.localStorage.getItem("dogchef-printer-id");
+      if (savedPrinterId && payload.print.printers.some((printer) => printer.id === savedPrinterId)) payload.print.selectedPrinterId = savedPrinterId;
       const freshPending = payload.orders.filter((order) => order.status === "pending_approval" && !knownNewOrders.current.has(order.id));
       if (hasLoaded.current && freshPending.length) {
         setNotice(freshPending.length === 1 ? `Novo pedido ${freshPending[0].publicCode} recebido.` : `${freshPending.length} novos pedidos recebidos.`);
         if (typeof Notification !== "undefined" && Notification.permission === "granted") {
           new Notification("Novo pedido no Dog do Chef", {
             body: freshPending.length === 1 ? `${freshPending[0].publicCode} · ${freshPending[0].customer.name}` : `${freshPending.length} pedidos aguardam confirmação.`,
-            icon: "/icon.svg",
+            icon: "/icon.png",
             tag: "dogchef-novos-pedidos",
           });
         }
@@ -225,7 +231,7 @@ export function AdminDashboard() {
       const response = await fetch(`/api/v1/admin/orders/${order.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, expectedVersion: order.version }),
+        body: JSON.stringify({ status, expectedVersion: order.version, printerId: status === "confirmed" ? data?.print.selectedPrinterId : undefined }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível atualizar o pedido.");
@@ -294,6 +300,32 @@ export function AdminDashboard() {
     }
   }
 
+  async function updateAdminPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (newAdminPassword !== adminPasswordConfirmation) {
+      setError("A confirmação da nova senha não confere.");
+      return;
+    }
+    setBusyId("admin-password");
+    try {
+      const response = await fetch("/api/v1/admin/settings/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: currentAdminPassword, newPassword: newAdminPassword, confirmation: adminPasswordConfirmation }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível atualizar a senha administrativa.");
+      setCurrentAdminPassword("");
+      setNewAdminPassword("");
+      setAdminPasswordConfirmation("");
+      setNotice("Senha administrativa atualizada.");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível atualizar a senha administrativa.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
   function updateHour(index: number, update: Partial<WorkingHour>) {
     setHoursDraft((current) => current?.map((hour, hourIndex) => hourIndex === index ? { ...hour, ...update } : hour) ?? null);
   }
@@ -322,13 +354,33 @@ export function AdminDashboard() {
   async function reprintOrder(order: Order) {
     setBusyId(`print-${order.id}`);
     try {
-      const response = await fetch(`/api/v1/admin/orders/${order.id}/print`, { method: "POST" });
+      const response = await fetch(`/api/v1/admin/orders/${order.id}/print`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ printerId: data?.print.selectedPrinterId }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível reenviar para impressão.");
       setNotice(`Pedido ${order.publicCode} enviado para a fila de impressão.`);
       await load();
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Não foi possível reenviar para impressão.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function saveSelectedPrinter(selectedPrinterId: string) {
+    setBusyId("printer");
+    try {
+      const response = await fetch("/api/v1/admin/settings/printer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedPrinterId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível selecionar a impressora.");
+      window.localStorage.setItem("dogchef-printer-id", selectedPrinterId);
+      setNotice("Impressora selecionada para os próximos pedidos.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível selecionar a impressora.");
     } finally {
       setBusyId("");
     }
@@ -525,13 +577,14 @@ export function AdminDashboard() {
             <article><div><b>Recebimento de pedidos</b><small>{data.catalog.acceptingOrders ? "Clientes podem finalizar pedidos dentro do horário." : "Novos pedidos estão bloqueados temporariamente."}</small></div><button className={data.catalog.acceptingOrders ? "store-toggle is-open" : "store-toggle"} disabled={busyId === "store-settings"} onClick={() => void updateAcceptingOrders(!data.catalog.acceptingOrders)}><Power size={15}/>{data.catalog.acceptingOrders ? "Pausar loja" : "Abrir loja"}</button></article>
             <article><div><b>Taxa de entrega</b><small>R$ {feeInput(data.catalog.defaultDeliveryFeeCents).replace(".", ",")} por padrão; {data.catalog.deliveryZones.length} {data.catalog.deliveryZones.length === 1 ? "exceção" : "exceções"}.</small></div><span className="setting-ready"><Check size={16}/>Regra ativa</span></article>
           </div>
+          <form className="admin-password-editor" onSubmit={(event) => void updateAdminPassword(event)}><div><b>Senha administrativa</b><small>Atualize o acesso do painel sem expor a senha em arquivos.</small></div><div className="admin-password-fields"><label><span>Senha atual</span><input required type="password" autoComplete="current-password" value={currentAdminPassword} onChange={(event) => setCurrentAdminPassword(event.target.value)}/></label><label><span>Nova senha</span><input required minLength={12} type="password" autoComplete="new-password" value={newAdminPassword} onChange={(event) => setNewAdminPassword(event.target.value)}/></label><label><span>Confirmar nova senha</span><input required minLength={12} type="password" autoComplete="new-password" value={adminPasswordConfirmation} onChange={(event) => setAdminPasswordConfirmation(event.target.value)}/></label><button className="button button-dark" type="submit" disabled={busyId === "admin-password"}><Save size={15}/>{busyId === "admin-password" ? "Salvando..." : "Atualizar senha"}</button></div></form>
           {hoursDraft && <div className="hours-editor"><div className="hours-editor-heading"><div><b>Dias e horários</b><small>O checkout bloqueia pedidos fora destes períodos.</small></div><button className="button button-dark" disabled={busyId === "working-hours"} onClick={() => void saveWorkingHours()}><Save size={15}/>{busyId === "working-hours" ? "Salvando..." : "Salvar horários"}</button></div><div className="hours-grid">{hoursDraft.map((hour, index) => <div className="hours-row" key={`${hour.weekday}-${hour.slot}`}><b>{weekdays[hour.weekday]}</b><label className="closed-toggle"><input type="checkbox" checked={hour.isClosed} onChange={(event) => updateHour(index, { isClosed: event.target.checked })}/><span>Fechado</span></label><label><span>Abre</span><input type="time" disabled={hour.isClosed} value={hour.opensAt.slice(0, 5)} onChange={(event) => updateHour(index, { opensAt: event.target.value })}/></label><label><span>Fecha</span><input type="time" disabled={hour.isClosed} value={hour.closesAt.slice(0, 5)} onChange={(event) => updateHour(index, { closesAt: event.target.value })}/></label></div>)}</div></div>}
           <div className="delivery-editor"><div className="delivery-editor-heading"><div><b>Taxa padrão e exceções</b><small>Todo bairro usa a taxa padrão, exceto os cadastrados abaixo.</small></div><MapPin size={20}/></div><div className="default-fee-control"><label><span>Taxa padrão</span><div className="money-input"><span>R$</span><input type="number" min="0" step="0.01" value={defaultFeeDraft ?? ""} onChange={(event) => setDefaultFeeDraft(event.target.value)}/></div></label><button className="button button-dark" disabled={busyId === "default-delivery-fee"} onClick={() => void saveDefaultDeliveryFee()}><Save size={15}/>Salvar taxa</button></div><div className="delivery-override-form"><label><span>Novo bairro com valor diferente</span><input value={newZoneName} maxLength={80} placeholder="Nome do bairro" onChange={(event) => setNewZoneName(event.target.value)}/></label><label><span>Taxa</span><div className="money-input"><span>R$</span><input type="number" min="0" step="0.01" value={newZoneFee} placeholder="0,00" onChange={(event) => setNewZoneFee(event.target.value)}/></div></label><button className="button button-dark" disabled={busyId === "new-delivery-zone"} onClick={() => void createDeliveryOverride()}><Plus size={15}/>Adicionar</button></div>{data.catalog.deliveryZones.length > 0 ? <div className="delivery-overrides">{data.catalog.deliveryZones.map((zone) => <div className="delivery-override-row" key={zone.id}><input aria-label={`Nome do bairro ${zone.name}`} value={zoneDrafts[zone.id]?.name ?? zone.name} onChange={(event) => updateZoneDraft(zone.id, { name: event.target.value })}/><div className="money-input"><span>R$</span><input aria-label={`Taxa do bairro ${zone.name}`} type="number" min="0" step="0.01" value={zoneDrafts[zone.id]?.fee ?? feeInput(zone.feeCents)} onChange={(event) => updateZoneDraft(zone.id, { fee: event.target.value })}/></div><button className="icon-button" disabled={busyId === `delivery-${zone.id}`} onClick={() => void saveDeliveryOverride(zone.id)} aria-label={`Salvar ${zone.name}`} title="Salvar"><Save size={15}/></button><button className="icon-button danger" disabled={busyId === `delivery-${zone.id}`} onClick={() => void deleteDeliveryOverride(zone.id)} aria-label={`Excluir ${zone.name}`} title="Excluir"><Trash2 size={15}/></button></div>)}</div> : <p className="delivery-empty">Nenhuma exceção cadastrada. Todos os bairros usam a taxa padrão.</p>}</div>
         </section>}
 
         {activePanel === "print" && <section className="admin-panel-view admin-section print-section">
-          <div className="section-heading"><div><p className="eyebrow">Impressão térmica</p><h2>Agente local</h2></div><span className="integration-chip"><Printer size={15}/>aguardando instalação</span></div>
-          <div className="print-card"><Printer size={26}/><div><b>Conecte a impressora da cozinha</b><p>O agente tenta cada ticket até 5 vezes. Em caso de falha permanente, use a reimpressão manual abaixo.</p></div><code>npm run print-agent</code></div>
+          <div className="section-heading"><div><p className="eyebrow">Impressão térmica</p><h2>Escolha onde imprimir</h2></div><span className="integration-chip"><Printer size={15}/>agente local</span></div>
+          <div className="print-card"><Printer size={26}/><div><b>Impressora dos próximos pedidos</b><p>O agente local envia cada ticket para o perfil escolhido. O endereço da impressora fica somente no computador da cozinha.</p><label className="print-selector"><span>Imprimir em</span><select value={data.print.selectedPrinterId} disabled={busyId === "printer"} onChange={(event) => void saveSelectedPrinter(event.target.value)}>{data.print.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}</select></label></div><code>npm run print-agent</code></div>
           {printOrders.length > 0 && <div className="print-jobs">{printOrders.map((order) => <article key={order.id}><div><b>{order.publicCode}</b><small>{order.customer.name}</small></div><span className={`print-status ${order.printStatus}`}>{printLabels[order.printStatus!]}</span><button className="button button-dark" disabled={busyId === `print-${order.id}`} onClick={() => void reprintOrder(order)}><Printer size={14}/>{order.printStatus === "printed" ? "Reimprimir" : "Tentar novamente"}</button></article>)}</div>}
         </section>}
       </section>

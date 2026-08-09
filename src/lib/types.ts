@@ -21,6 +21,11 @@ export type PaymentMethod = "pix" | "cash" | "card";
 export type DeliveryType = "delivery" | "pickup";
 export type PrintStatus = "queued" | "leased" | "printed" | "failed" | "dead";
 
+export type PrintSettings = {
+  selectedPrinterId: string;
+  printers: { id: string; name: string }[];
+};
+
 export type Option = {
   id: string;
   name: string;

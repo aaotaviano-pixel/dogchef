@@ -6,11 +6,11 @@ export const metadata: Metadata = {
   title: "Dog do Chef — prensado de verdade",
   description: "Hot dogs prensados, gratinados, porções e bebidas preparados na hora.",
   applicationName: "Dog do Chef",
-  icons: { icon: "/icon.svg" },
+  icons: { icon: "/icon.png" },
   robots: { index: true, follow: true },
 };
 
-export const viewport: Viewport = { themeColor: "#f6faf6", colorScheme: "light" };
+export const viewport: Viewport = { themeColor: "#FFF6EC", colorScheme: "light" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

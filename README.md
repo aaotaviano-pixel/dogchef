@@ -36,6 +36,7 @@ Copie `.env.example` para `.env.local` e preencha somente as integrações que s
 | Sessões | `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `CUSTOMER_SESSION_SECRET` | Login do admin e assinatura independente da sessão do cliente; os segredos devem ser aleatórios e ter pelo menos 32 caracteres. |
 | Supabase | `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | Acesso somente no servidor. Obrigatórias para produção persistente. |
 | Supabase público | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Login opcional com Google no navegador. A chave publicável pode ser exposta; a chave secreta nunca. |
+| Rate limiting | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | Limitação distribuída das APIs no middleware Edge. Obrigatórias para proteção ativa em produção. |
 | Pix | `MERCADO_PAGO_ACCESS_TOKEN`, `MERCADO_PAGO_WEBHOOK_SECRET` | Criação e validação de pagamentos Pix. |
 | WhatsApp | `NEXT_PUBLIC_WHATSAPP_NUMBER` | Somente o botão público de atendimento. O site não envia mensagens automáticas de pedido. |
 | Maps | `GOOGLE_MAPS_API_KEY` | Opcional para recursos futuros de endereço; não é necessário para calcular a taxa atual. |
@@ -74,7 +75,9 @@ Use uma nova migration para alterações de esquema ou dados de produção; não
 - `/pedido/[publicCode]` aceita a conta proprietária ou um token antigo de rastreamento válido. O código público sozinho não libera o pedido.
 - Pedidos anteriores à migration continuam preservados com `customer_id` nulo e não são vinculados automaticamente.
 - Meus pedidos e a página de acompanhamento consultam mudanças a cada poucos segundos, exibem aviso dentro do site e podem emitir uma notificação do navegador quando o cliente autorizar.
-- Recuperação de senha por e-mail permanece desativada para manter o projeto gratuito e sem dependência de SMTP.
+- O link “Esqueci minha senha” usa o e-mail de recuperação do Supabase Auth. O servidor mantém o hash `scrypt` interno sincronizado, então o login atual continua funcionando.
+- O fluxo nunca informa se um e-mail existe. O link é de uso único e expira conforme as regras do Supabase Auth; nenhuma senha ou token é salvo pelo DogChef.
+- O showcase do admin usa a função protegida `set_showcase_products`; a migration `20260802190000_fix_showcase_update_where.sql` corrige a política de atualização segura do Supabase. A API também possui fallback server-side com filtros explícitos para compatibilidade.
 
 Antes de publicar esta funcionalidade, aplique `20260801164243_customer_accounts.sql` e `20260802181751_customer_google_auth.sql` no banco e configure `CUSTOMER_SESSION_SECRET` na Vercel.
 
@@ -88,7 +91,27 @@ O botão aparece somente quando as variáveis públicas do Supabase estão preen
 4. Em **Authentication → URL Configuration**, informe a URL pública do site e permita `https://SEU_DOMINIO/auth/google` e `http://localhost:3000/auth/google`.
 5. Configure `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` na Vercel. O Client Secret do Google fica somente no painel do Supabase.
 
+## Recuperação de senha
+
+O cliente pode solicitar a recuperação dentro do acesso da conta. O endpoint `/api/v1/customer/password/forgot` cria o vínculo do cadastro interno com um usuário do Supabase Auth quando necessário e solicita o envio do link. A página `/auth/reset-password` valida a sessão de recuperação, atualiza a senha no Supabase e grava somente o hash `scrypt` no cadastro interno.
+
+No Supabase, em **Authentication → URL Configuration → Redirect URLs**, permita as URLs usadas pelos ambientes:
+
+```text
+http://localhost:3000/auth/reset-password
+http://127.0.0.1:3000/auth/reset-password
+https://dogchef-one.vercel.app/auth/reset-password
+```
+
+O envio usa o serviço de e-mail do Supabase. Para produção, configure um SMTP próprio em **Authentication → SMTP Settings**, porque o serviço padrão é limitado e serve apenas para testes. Não coloque credenciais SMTP no código, no frontend ou no Git.
+
 Depois, teste uma conta nova e uma conta por senha com o mesmo e-mail. O vínculo só ocorre após o Supabase confirmar o usuário e o e-mail.
+
+## Senha administrativa
+
+O primeiro acesso usa `ADMIN_PASSWORD` configurada no ambiente. Dentro de **Configurações**, o administrador pode informar a senha atual e repetir a nova senha duas vezes. Depois da primeira troca, somente um hash `scrypt` com salt é salvo na tabela `admin_settings`; a senha nunca é gravada no código, no frontend ou em texto puro no banco.
+
+A migration `20260802210000_admin_password_settings.sql` precisa estar aplicada no Supabase remoto. O endereço direto do painel é `/admin/login` e não fica exposto no rodapé da loja.
 
 ## Publicar na Vercel
 
@@ -107,6 +130,56 @@ Após o primeiro deploy, configure os webhooks com a URL de produção:
 - Mercado Pago: `https://SEU_DOMINIO/api/v1/payments/webhook`
 
 Faça um pedido de teste, confirme o webhook e só então habilite a operação pública. A Vercel hospeda a aplicação; a impressora permanece na rede local e é atendida pelo agente abaixo.
+
+## Proteção das APIs e rate limiting
+
+O arquivo `middleware.ts` protege todas as rotas `/api/v1/*` antes que elas alcancem
+os handlers. O identificador combina o host e o IP validado a partir de
+`x-real-ip` ou do primeiro IP válido em `x-forwarded-for`.
+
+Limites atuais por IP:
+
+- Leituras `GET`, incluindo `/api/v1/menu`: 60 requisições por minuto.
+- Autenticação e recuperação de acesso: 5 requisições por minuto.
+- Criação de pedidos `POST /api/v1/orders`: 10 requisições por minuto.
+- Demais escritas: 30 requisições por minuto.
+
+Quando o limite é ultrapassado, a resposta é `429` com JSON contendo `code:
+RATE_LIMITED`, `retryAfter` e o cabeçalho `Retry-After`. Também são enviados os
+headers `X-RateLimit-Limit`, `X-RateLimit-Remaining` e `X-RateLimit-Reset`.
+
+### Configuração
+
+1. Crie uma base Redis REST no [Upstash Console](https://console.upstash.com/redis).
+2. Copie somente a **REST URL** e o **REST Token** mostrados pela base.
+3. Para desenvolvimento local, instale as dependências e preencha `.env.local`:
+
+```powershell
+cd C:\DOGCHEF
+npm install @upstash/ratelimit@2.0.8 @upstash/redis@1.38.1 --save-exact
+```
+
+```text
+UPSTASH_REDIS_REST_URL=https://seu-banco.upstash.io
+UPSTASH_REDIS_REST_TOKEN=seu-token-rest
+```
+
+4. Na Vercel, abra **Project Settings → Environment Variables** e adicione as duas
+   variáveis nos ambientes **Production** e **Preview**. Elas são server-side e nunca
+   devem usar o prefixo `NEXT_PUBLIC_`. A integração oficial **Upstash for Redis** da
+   Vercel pode criar automaticamente `KV_REST_API_URL` e `KV_REST_API_TOKEN`; o
+   middleware aceita esses nomes ou os nomes `UPSTASH_REDIS_REST_*`.
+5. Faça um novo deploy para aplicar as variáveis:
+
+```powershell
+npx vercel --prod
+```
+
+Sem essas variáveis, o middleware fica temporariamente fail-open para não derrubar o
+ambiente local. Em produção, a proteção só deve ser considerada ativa depois de
+configurar o Upstash e validar uma resposta `429`. O limitador reduz abuso e spam,
+mas não substitui a proteção de borda da Vercel, firewall/WAF, monitoramento e limites
+do provedor quando houver uma campanha distribuída de DDoS.
 
 ## Pix (Mercado Pago)
 
@@ -145,6 +218,7 @@ As comparações de bairro ignoram maiúsculas, minúsculas e acentos. Excluir u
 - Em Produtos, a administradora pode cadastrar, editar, pausar e excluir itens, além de enviar várias fotos direto do celular. Cada envio aceita até 12 imagens JPG, PNG, WEBP ou AVIF de até 8 MB; novos envios podem ser feitos ao editar o produto.
 - A galeria permite escolher a foto principal e remover fotos individualmente. A foto principal também é usada nos cards e no banner.
 - Em Showcase, até cinco produtos ativos podem ser escolhidos e reordenados para formar o carrossel da home.
+- Em Configurações, a senha administrativa pode ser trocada com confirmação dupla da nova senha.
 - Em desenvolvimento sem Supabase, alterações de catálogo ficam em `.data/catalog.json` e fotos em `public/uploads/`; ambos são ignorados pelo Git. Produção exige Supabase para persistência.
 - A migration `20260731224500_admin_catalog_and_gallery.sql` cria a galeria, a ordenação do showcase e o bucket público `product-images`. A chave secreta continua restrita ao servidor.
 
@@ -153,6 +227,8 @@ As comparações de bairro ignoram maiúsculas, minúsculas e acentos. Excluir u
 O banco já possui grupos de adicionais, opções, limites de seleção e vínculos com produtos. O catálogo carrega essas relações automaticamente e recalcula os valores no servidor. Nenhum adicional ou preço fictício é criado: cadastre os dados reais em `product_option_groups`, `product_options` e `product_option_group_products` quando a cliente definir nomes e valores.
 
 Troque a senha administrativa e a chave de sessão caso sejam expostas. Não compartilhe essas variáveis por chat, commit ou ticket público.
+
+O storefront usa o tema claro por padrão, com a identidade visual do Dog do Chef em creme, vermelho, mostarda e verde. Para testar temporariamente a versão escura, defina `NEXT_PUBLIC_DOGCHEF_DARK_PREVIEW=true` no ambiente desejado.
 
 ## Agente local ESC/POS
 
@@ -163,7 +239,9 @@ O agente em `agent/index.ts` é executado no computador da cozinha. Ele consulta
 3. Escolha um transporte:
    - Rede: `PRINTER_TRANSPORT=tcp`, `PRINTER_HOST` e `PRINTER_PORT` (normalmente `9100`).
    - USB compartilhada no Windows: `PRINTER_TRANSPORT=windows-share` e `PRINTER_SHARE=\\SERVIDOR\\NOME_DA_IMPRESSORA`.
-4. Mantenha o processo em execução:
+4. Para usar mais de uma impressora, configure no ambiente da aplicação uma lista pública apenas de IDs e nomes em `PRINT_PRINTER_OPTIONS`, por exemplo `[{"id":"cozinha","name":"Impressora da cozinha"},{"id":"balcao","name":"Impressora do balcão"}]`. Na máquina da cozinha, configure os mesmos IDs com os endereços locais em `PRINTER_PROFILES_JSON` dentro de `agent/.env`.
+5. Abra o painel, entre em **Impressão** e selecione a impressora. A escolha fica salva neste navegador e é enviada junto aos próximos tickets; endereços e compartilhamentos continuam somente no agente local.
+6. Mantenha o processo em execução:
 
 ```powershell
 cd C:\DOGCHEF
