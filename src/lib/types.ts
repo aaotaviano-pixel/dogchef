@@ -23,7 +23,18 @@ export type PrintStatus = "queued" | "leased" | "printed" | "failed" | "dead";
 
 export type PrintSettings = {
   selectedPrinterId: string;
-  printers: { id: string; name: string }[];
+  printers: PrinterOption[];
+  agentConnected?: boolean;
+  agentId?: string;
+  lastSeenAt?: string;
+};
+
+export type PrinterOption = {
+  id: string;
+  name: string;
+  status?: "ready" | "offline" | "unknown";
+  isDefault?: boolean;
+  source?: "configured" | "windows";
 };
 
 export type Option = {

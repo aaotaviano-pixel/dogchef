@@ -3,6 +3,7 @@
  * polls the protected application API, claims a leased job, and emits ESC/POS.
  */
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
@@ -27,10 +28,13 @@ type Job = { id: string; leaseToken: string; payload: Ticket };
 type PrinterProfile = {
   id: string;
   name: string;
-  transport: "tcp" | "windows-share";
+  transport: "tcp" | "windows-share" | "windows-raw";
   host?: string;
   port?: number;
   share?: string;
+  windowsName?: string;
+  status?: "ready" | "offline" | "unknown";
+  isDefault?: boolean;
 };
 
 const execFileAsync = promisify(execFile);
@@ -67,16 +71,66 @@ function printerProfiles(): PrinterProfile[] {
     return parsed.filter((profile): profile is PrinterProfile => {
       if (!profile || typeof profile !== "object") return false;
       const value = profile as Record<string, unknown>;
-      return typeof value.id === "string" && typeof value.name === "string" && (value.transport === "tcp" || value.transport === "windows-share");
+      return typeof value.id === "string" && typeof value.name === "string" && (value.transport === "tcp" || value.transport === "windows-share" || value.transport === "windows-raw");
     });
   } catch {
     throw new Error("PRINTER_PROFILES_JSON inválido.");
   }
 }
 
-function selectedPrinter(ticket: Ticket): PrinterProfile {
+function windowsPrinterId(name: string) {
+  const slug = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || "printer";
+  const hash = createHash("sha1").update(name).digest("hex").slice(0, 8);
+  return `windows-${slug}-${hash}`;
+}
+
+function windowsPrinterStatus(status: string, workOffline: boolean): "ready" | "offline" | "unknown" {
+  if (workOffline || status === "7" || status.toLowerCase().includes("offline")) return "offline";
+  if (["3", "4", "5", "idle", "printing", "warmup"].includes(status.toLowerCase())) return "ready";
+  return "unknown";
+}
+
+let discoveredPrinterCache: { at: number; printers: PrinterProfile[] } | undefined;
+
+async function discoverInstalledPrinters(): Promise<PrinterProfile[]> {
+  if (process.platform !== "win32") return [];
+  if (discoveredPrinterCache && Date.now() - discoveredPrinterCache.at < 15_000) return discoveredPrinterCache.printers;
+  const script = [
+    "$items = Get-CimInstance -ClassName Win32_Printer | ForEach-Object { [pscustomobject]@{ name = [string]$_.Name; isDefault = [bool]$_.Default; printerStatus = [string]$_.PrinterStatus; workOffline = [bool]$_.WorkOffline } }",
+    "$items | ConvertTo-Json -Compress",
+  ].join("; ");
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { windowsHide: true, timeout: 10_000 });
+    const parsed = JSON.parse(stdout.trim() || "[]") as unknown;
+    const items = (Array.isArray(parsed) ? parsed : [parsed]).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"));
+    const printers = items
+      .filter((item) => typeof item.name === "string" && item.name.trim())
+      .map((item) => ({
+        id: windowsPrinterId(String(item.name)),
+        name: String(item.name).trim(),
+        transport: "windows-raw" as const,
+        windowsName: String(item.name).trim(),
+        status: windowsPrinterStatus(String(item.printerStatus ?? ""), item.workOffline === true),
+        isDefault: item.isDefault === true,
+      }));
+    discoveredPrinterCache = { at: Date.now(), printers };
+    return printers;
+  } catch {
+    discoveredPrinterCache = { at: Date.now(), printers: [] };
+    return [];
+  }
+}
+
+function heartbeatPrinters(printers: PrinterProfile[]) {
+  return printers.map((printer) => ({ id: printer.id, name: printer.name, status: printer.status ?? "unknown", isDefault: printer.isDefault === true }));
+}
+
+async function selectedPrinter(ticket: Ticket): Promise<PrinterProfile> {
   const profile = printerProfiles().find((candidate) => candidate.id === ticket.printerId);
   if (profile) return profile;
+  const installed = await discoverInstalledPrinters();
+  const installedProfile = installed.find((candidate) => candidate.id === ticket.printerId);
+  if (installedProfile) return installedProfile;
   return {
     id: ticket.printerId || "default",
     name: "Impressora padrão",
@@ -145,9 +199,60 @@ async function printWindowsShare(data: Buffer, jobId: string, profile: PrinterPr
   await execFileAsync("cmd.exe", ["/d", "/s", "/c", `copy /b "${spoolFile}" "${share}"`], { windowsHide: true, timeout: 10_000 });
 }
 
+async function printWindowsRaw(data: Buffer, jobId: string, profile: PrinterProfile) {
+  if (process.platform !== "win32") throw new Error("A impressão direta só está disponível no agente Windows.");
+  if (!profile.windowsName) throw new Error("A impressora Windows não foi identificada.");
+  await mkdir(spoolDirectory, { recursive: true });
+  const spoolFile = path.join(spoolDirectory, `${jobId}.bin`);
+  await writeFile(spoolFile, data);
+  const script = String.raw`
+Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+public static class DogChefRawPrinter {
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  public class DocInfo { public string pDocName; public string pOutputFile; public string pDataType; }
+  [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)] public static extern bool OpenPrinter(string name, out IntPtr printer, IntPtr defaults);
+  [DllImport("winspool.drv", SetLastError = true)] public static extern bool ClosePrinter(IntPtr printer);
+  [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)] public static extern int StartDocPrinter(IntPtr printer, int level, [In] DocInfo doc);
+  [DllImport("winspool.drv", SetLastError = true)] public static extern bool EndDocPrinter(IntPtr printer);
+  [DllImport("winspool.drv", SetLastError = true)] public static extern bool StartPagePrinter(IntPtr printer);
+  [DllImport("winspool.drv", SetLastError = true)] public static extern bool EndPagePrinter(IntPtr printer);
+  [DllImport("winspool.drv", SetLastError = true)] public static extern bool WritePrinter(IntPtr printer, byte[] bytes, int count, out int written);
+  public static void Send(string printerName, string fileName) {
+    IntPtr printer;
+    if (!OpenPrinter(printerName, out printer, IntPtr.Zero)) throw new Exception("Não foi possível abrir a impressora Windows.");
+    try {
+      var doc = new DocInfo { pDocName = "DogChef", pDataType = "RAW", pOutputFile = null };
+      if (StartDocPrinter(printer, 1, doc) == 0) throw new Exception("Não foi possível iniciar o trabalho de impressão.");
+      try {
+        if (!StartPagePrinter(printer)) throw new Exception("Não foi possível iniciar a página.");
+        try {
+          var bytes = File.ReadAllBytes(fileName); int written;
+          if (!WritePrinter(printer, bytes, bytes.Length, out written) || written != bytes.Length) throw new Exception("A impressora não aceitou todos os dados.");
+        } finally { EndPagePrinter(printer); }
+      } finally { EndDocPrinter(printer); }
+    } finally { ClosePrinter(printer); }
+  }
+}
+"@
+[DogChefRawPrinter]::Send($env:DOGCHEF_PRINTER_NAME, $env:DOGCHEF_SPOOL_FILE)
+`;
+  await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], {
+    windowsHide: true,
+    timeout: 15_000,
+    env: { ...process.env, DOGCHEF_PRINTER_NAME: profile.windowsName, DOGCHEF_SPOOL_FILE: spoolFile },
+  });
+}
+
 async function printTicket(ticket: Ticket, jobId: string) {
   const data = escpos(ticket, jobId);
-  const profile = selectedPrinter(ticket);
+  const profile = await selectedPrinter(ticket);
+  if (profile.transport === "windows-raw") {
+    await printWindowsRaw(data, jobId, profile);
+    return;
+  }
   if (profile.transport === "windows-share") {
     await printWindowsShare(data, jobId, profile);
   } else {
@@ -189,7 +294,9 @@ async function run() {
   let backoff = 2_500;
   for (;;) {
     try {
-      await request("/api/v1/print-agent/heartbeat", { agentId });
+      const discoveredPrinters = await discoverInstalledPrinters();
+      const advertisedPrinters = discoveredPrinters.length ? discoveredPrinters : printerProfiles();
+      await request("/api/v1/print-agent/heartbeat", { agentId, printers: heartbeatPrinters(advertisedPrinters) });
       const result = await request("/api/v1/print-agent/jobs/claim", { agentId, limit: 1 });
       const jobs = Array.isArray(result.jobs) ? result.jobs as Job[] : [];
       for (const job of jobs) {

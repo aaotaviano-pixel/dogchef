@@ -86,3 +86,10 @@
   confirmacoes e reimpresses; o agente local resolve o endereco por ID.
 - `agent/index.ts` passou a aceitar varios perfis em `PRINTER_PROFILES_JSON`, mantendo
   compatibilidade com a configuracao de uma unica impressora.
+
+## 2026-08-09 — Reset seguro dos indicadores e descoberta Windows
+
+- O painel passou a zerar indicadores por marco no `audit_log`, preservando pedidos e clientes.
+- O agente Windows passou a descobrir impressoras instaladas via `Win32_Printer`.
+- A lista descoberta, estado e impressora padrao sao exibidos no painel pela tabela `print_agents`.
+- Tickets para impressoras descobertas usam o spooler RAW do Windows; perfis TCP e compartilhados continuam suportados.

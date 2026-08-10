@@ -232,15 +232,16 @@ O storefront usa o tema claro por padrão, com a identidade visual do Dog do Che
 
 ## Agente local ESC/POS
 
-O agente em `agent/index.ts` é executado no computador da cozinha. Ele consulta a API protegida, reserva um trabalho de impressão e envia o ticket ESC/POS por rede TCP ou compartilhamento de impressora do Windows. Ele não se conecta diretamente ao Supabase.
+O agente em `agent/index.ts` é executado no computador da cozinha. Ele consulta a API protegida, reserva um trabalho de impressão e envia o ticket ESC/POS por rede TCP, compartilhamento ou spooler RAW do Windows. Ele não se conecta diretamente ao Supabase.
 
 1. Na máquina da impressora, copie `agent/.env.example` para `agent/.env`.
 2. Preencha `DOGCHEF_API_URL`, `PRINT_AGENT_TOKEN` e `PRINT_AGENT_ID`.
-3. Escolha um transporte:
+3. Escolha um transporte quando necessário:
    - Rede: `PRINTER_TRANSPORT=tcp`, `PRINTER_HOST` e `PRINTER_PORT` (normalmente `9100`).
    - USB compartilhada no Windows: `PRINTER_TRANSPORT=windows-share` e `PRINTER_SHARE=\\SERVIDOR\\NOME_DA_IMPRESSORA`.
-4. Para usar mais de uma impressora, configure no ambiente da aplicação uma lista pública apenas de IDs e nomes em `PRINT_PRINTER_OPTIONS`, por exemplo `[{"id":"cozinha","name":"Impressora da cozinha"},{"id":"balcao","name":"Impressora do balcão"}]`. Na máquina da cozinha, configure os mesmos IDs com os endereços locais em `PRINTER_PROFILES_JSON` dentro de `agent/.env`.
-5. Abra o painel, entre em **Impressão** e selecione a impressora. A escolha fica salva neste navegador e é enviada junto aos próximos tickets; endereços e compartilhamentos continuam somente no agente local.
+4. No Windows, o agente consulta as impressoras instaladas e as envia ao painel como opções com estado e impressora padrão. A seleção usa o spooler RAW do Windows, sem exigir que a administradora descubra IP ou compartilhamento.
+5. Para impressoras de rede ou computadores não Windows, configure no ambiente da aplicação uma lista pública apenas de IDs e nomes em `PRINT_PRINTER_OPTIONS`, por exemplo `[{"id":"cozinha","name":"Impressora da cozinha"}]`, e os endereços locais em `PRINTER_PROFILES_JSON` dentro de `agent/.env`.
+6. Abra o painel, entre em **Impressão** e selecione uma impressora. A escolha fica salva neste navegador e é enviada junto aos próximos tickets; endereços e credenciais continuam somente no agente local.
 6. Mantenha o processo em execução:
 
 ```powershell
@@ -249,6 +250,10 @@ npm run print-agent
 ```
 
 O token do agente deve ser longo, aleatório e exclusivo. Em produção, execute-o como serviço do Windows ou tarefa agendada, com reinício automático, e faça um teste de ticket antes do horário de atendimento. Falhas transitórias são tentadas novamente até cinco vezes; depois disso, o painel permite reimpressão manual.
+
+## Indicadores do painel
+
+Em **Configurações**, a ação **Zerar indicadores** cria um marco de auditoria e faz o painel começar a contar a partir daquele momento. Pedidos, clientes, pagamentos e registros antigos não são apagados; eles continuam preservados para consulta e rastreabilidade.
 
 ## Arquitetura
 

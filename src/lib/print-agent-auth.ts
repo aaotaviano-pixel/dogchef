@@ -8,3 +8,7 @@ export function isPrintAgentRequest(request: NextRequest) {
   if (!configured || !supplied || configured.length !== supplied.length) return false;
   return timingSafeEqual(Buffer.from(configured), Buffer.from(supplied));
 }
+
+export function printAgentToken(request: NextRequest) {
+  return request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+}

@@ -88,8 +88,15 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
 
 ## Impressao
 
-- Os IDs e nomes dos perfis ficam em `PRINT_PRINTER_OPTIONS` no ambiente da aplicacao.
-- Enderecos TCP e compartilhamentos de Windows ficam apenas no `agent/.env`, em
-  `PRINTER_PROFILES_JSON`.
-- O painel salva a escolha no navegador e envia o ID junto ao ticket; nunca exibir
-  endereco ou credencial da impressora para o cliente.
+- Em Windows, a lista de impressoras instaladas vem do agente local autenticado e e gravada
+  apenas como capacidade operacional em `print_agents`; nomes, estado e padrao aparecem no
+  painel, mas enderecos e credenciais nunca aparecem no frontend.
+- O spooler RAW do Windows recebe tickets ESC/POS para a impressora selecionada.
+- `PRINT_PRINTER_OPTIONS` e `PRINTER_PROFILES_JSON` permanecem como fallback para rede,
+  compartilhamento e ambientes sem descoberta automatica.
+- O painel salva a escolha no navegador e envia o ID junto ao ticket.
+
+## Indicadores
+
+- Para zerar somente os numeros exibidos, usar o marco auditavel de `dashboard_metrics_reset`.
+- Nunca apagar ou sobrescrever pedidos, pagamentos ou clientes para limpar um dashboard.

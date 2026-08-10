@@ -53,8 +53,16 @@ Upstash, o middleware permanece fail-open para nao derrubar o ambiente local.
 
 ## Impressao e escolha de impressora
 
-O painel administrativo mostra os perfis definidos em `PRINT_PRINTER_OPTIONS`. A escolha
-fica no navegador do painel e e enviada no momento da confirmacao ou reimpressao do pedido.
-O agente local resolve o mesmo ID usando `PRINTER_PROFILES_JSON`, mantendo hosts, shares e
-qualquer detalhe de rede fora do banco e do frontend. Sem perfis adicionais, o agente usa a
-configuracao legada `PRINTER_TRANSPORT`, `PRINTER_HOST`, `PRINTER_PORT` ou `PRINTER_SHARE`.
+O agente Windows consulta `Win32_Printer`, gera IDs estaveis, envia nomes, estado e
+impressora padrao no heartbeat e grava essa capacidade na tabela existente `print_agents`.
+O painel administrativo mostra as impressoras instaladas quando o agente esta conectado.
+A escolha fica no navegador do painel e e enviada no momento da confirmacao ou reimpressao.
+Para impressoras Windows descobertas, o agente usa o spooler RAW (`winspool.drv`); hosts,
+shares e qualquer detalhe de rede continuam fora do banco e do frontend. Sem descoberta,
+o agente usa perfis `PRINTER_PROFILES_JSON` ou a configuracao legada `PRINTER_TRANSPORT`,
+`PRINTER_HOST`, `PRINTER_PORT` ou `PRINTER_SHARE`.
+
+## Indicadores administrativos
+
+`resetDashboardMetrics` registra um evento `dashboard_metrics_reset` no `audit_log`. O painel
+filtra apenas pedidos criados depois do ultimo marco, sem alterar ou excluir pedidos antigos.

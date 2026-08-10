@@ -5,10 +5,10 @@ import path from "node:path";
 import { createQuote } from "@/lib/checkout";
 import { canTransition, hashTrackingToken, newOrderId, newPublicCode, newTrackingToken } from "@/lib/orders";
 import { defaultWorkingHours, products, seededCatalog } from "@/lib/seed";
-import { configuredPrinterOptions, defaultPrinterId, isConfiguredPrinter } from "@/lib/printers";
+import { configuredPrinterOptions, defaultPrinterId, parseDiscoveredPrinters } from "@/lib/printers";
 import { normalizeNeighborhood } from "@/lib/shop";
 import { getSupabase, hasSupabase } from "@/lib/supabase";
-import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, PrintSettings, Product, ProductImage, ProductInput, WorkingHour } from "@/lib/types";
+import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, PrintSettings, Product, ProductImage, ProductInput, PrinterOption, WorkingHour } from "@/lib/types";
 
 type PrintJob = {
   id: string;
@@ -34,6 +34,10 @@ const memory = {
   deliveryZones: [] as DeliveryZone[],
   workingHours: deepCopy(defaultWorkingHours),
   selectedPrinterId: defaultPrinterId(),
+  discoveredPrinters: [] as PrinterOption[],
+  printAgentId: undefined as string | undefined,
+  printAgentLastSeenAt: undefined as string | undefined,
+  metricsResetAt: undefined as string | undefined,
 };
 
 const localCatalogFile = path.join(process.cwd(), ".data", "catalog.json");
@@ -72,10 +76,12 @@ async function ensureLocalCommerceLoaded() {
       orders?: Order[];
       customerAccounts?: StoredCustomerAccount[];
       trackingHashes?: Record<string, string>;
+      metricsResetAt?: string;
     };
     memory.orders = Array.isArray(stored.orders) ? stored.orders : [];
     memory.customerAccounts = Array.isArray(stored.customerAccounts) ? stored.customerAccounts : [];
     memory.trackingHashes = stored.trackingHashes && typeof stored.trackingHashes === "object" ? stored.trackingHashes : {};
+    memory.metricsResetAt = typeof stored.metricsResetAt === "string" ? stored.metricsResetAt : undefined;
   } catch {
     // The empty local commerce state is the intended first-run state.
   }
@@ -89,6 +95,7 @@ async function persistLocalCommerce() {
     orders: memory.orders,
     customerAccounts: memory.customerAccounts,
     trackingHashes: memory.trackingHashes,
+    metricsResetAt: memory.metricsResetAt,
   }, null, 2), "utf8");
   await rename(temporaryFile, localCommerceFile);
 }
@@ -701,6 +708,59 @@ export async function listOrders() {
   return deepCopy(memory.orders);
 }
 
+async function latestMetricsResetAt() {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("audit_log")
+      .select("created_at")
+      .eq("action", "dashboard_metrics_reset")
+      .eq("entity_type", "dashboard")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!error && data?.created_at) memory.metricsResetAt = String(data.created_at);
+  }
+  return memory.metricsResetAt;
+}
+
+export async function listDashboardOrders() {
+  const resetAt = await latestMetricsResetAt();
+  const db = getSupabase();
+  if (db) {
+    let query = db
+      .from("orders")
+      .select("*, order_items(*), order_events(*), print_jobs(status)")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (resetAt) query = query.gte("created_at", resetAt);
+    const { data, error } = await query;
+    if (error) throw new Error("Não foi possível carregar os pedidos.");
+    return (data ?? []).map((row) => mapRemoteOrder(row as Record<string, unknown>));
+  }
+  await ensureLocalCommerceLoaded();
+  const orders = resetAt ? memory.orders.filter((order) => order.createdAt >= resetAt) : memory.orders;
+  return deepCopy(orders);
+}
+
+export async function resetDashboardMetrics() {
+  const resetAt = now();
+  const db = getSupabase();
+  if (db) {
+    const { error } = await db.from("audit_log").insert({
+      actor: "admin",
+      action: "dashboard_metrics_reset",
+      entity_type: "dashboard",
+      entity_id: "global",
+      diff: { resetAt, reason: "test-data-reset" },
+    });
+    if (error) throw new Error("Não foi possível zerar os indicadores.");
+  }
+  memory.metricsResetAt = resetAt;
+  await persistLocalCommerce();
+  return { resetAt };
+}
+
 export async function transitionOrder(
   id: string,
   target: OrderStatus,
@@ -739,7 +799,8 @@ export async function transitionOrder(
       actor: "admin",
     });
     if (target === "confirmed") {
-      const selectedPrinterId = printerId && isConfiguredPrinter(printerId) ? printerId : defaultPrinterId();
+      const printerSettings = await getPrintSettings();
+      const selectedPrinterId = printerId && printerSettings.printers.some((printer) => printer.id === printerId) ? printerId : printerSettings.selectedPrinterId;
       await db.from("print_jobs").upsert(
         { order_id: id, kind: "kitchen", status: "queued", payload: ticketPayload(existing, selectedPrinterId), attempts: 0, error: null, completed_at: null },
         { onConflict: "order_id,kind" },
@@ -755,7 +816,8 @@ export async function transitionOrder(
   targetOrder.events.push(event);
   if (target === "confirmed") {
     targetOrder.printStatus = "queued";
-    memory.printJobs.push({ id: newOrderId(), orderId: id, status: "queued", attempts: 0, printerId: printerId && isConfiguredPrinter(printerId) ? printerId : memory.selectedPrinterId });
+    const printerSettings = await getPrintSettings();
+    memory.printJobs.push({ id: newOrderId(), orderId: id, status: "queued", attempts: 0, printerId: printerId && printerSettings.printers.some((printer) => printer.id === printerId) ? printerId : printerSettings.selectedPrinterId });
   }
   await persistLocalCommerce();
   return deepCopy(targetOrder);
@@ -1164,16 +1226,80 @@ export async function updateStoreAcceptingOrders(acceptingOrders: boolean) {
   return { acceptingOrders };
 }
 
+async function discoveredPrinterSettings() {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("print_agents")
+      .select("name, capabilities, last_seen_at")
+      .eq("is_active", true)
+      .order("last_seen_at", { ascending: false })
+      .limit(10);
+    if (!error) {
+      const latest = (data ?? []).find((agent) => parseDiscoveredPrinters((agent.capabilities as { printers?: unknown } | null)?.printers).length > 0);
+      if (latest) {
+        const printers = parseDiscoveredPrinters((latest.capabilities as { printers?: unknown } | null)?.printers);
+        memory.discoveredPrinters = printers;
+        memory.printAgentId = String(latest.name);
+        memory.printAgentLastSeenAt = latest.last_seen_at ? String(latest.last_seen_at) : undefined;
+        return { printers, agentId: memory.printAgentId, lastSeenAt: memory.printAgentLastSeenAt };
+      }
+    }
+  }
+  return {
+    printers: memory.discoveredPrinters,
+    agentId: memory.printAgentId,
+    lastSeenAt: memory.printAgentLastSeenAt,
+  };
+}
+
 export async function getPrintSettings(): Promise<PrintSettings> {
-  const printers = configuredPrinterOptions();
-  const selectedPrinterId = isConfiguredPrinter(memory.selectedPrinterId) ? memory.selectedPrinterId : (printers[0]?.id ?? defaultPrinterId());
-  return { selectedPrinterId, printers };
+  const discovered = await discoveredPrinterSettings();
+  const printers = discovered.printers.length ? discovered.printers : configuredPrinterOptions();
+  const selectedPrinterId = printers.some((printer) => printer.id === memory.selectedPrinterId)
+    ? memory.selectedPrinterId
+    : (printers[0]?.id ?? defaultPrinterId());
+  const lastSeenMillis = discovered.lastSeenAt ? Date.parse(discovered.lastSeenAt) : 0;
+  return {
+    selectedPrinterId,
+    printers,
+    agentId: discovered.agentId,
+    lastSeenAt: discovered.lastSeenAt,
+    agentConnected: lastSeenMillis > 0 && Date.now() - lastSeenMillis < 30_000,
+  };
 }
 
 export async function updateSelectedPrinter(selectedPrinterId: string) {
-  if (!isConfiguredPrinter(selectedPrinterId)) throw new Error("Selecione uma impressora configurada.");
+  const settings = await getPrintSettings();
+  if (!settings.printers.some((printer) => printer.id === selectedPrinterId)) throw new Error("Selecione uma impressora encontrada no computador.");
   memory.selectedPrinterId = selectedPrinterId;
   return getPrintSettings();
+}
+
+export async function recordPrintAgentHeartbeat(agentId: string, printers: unknown, token: string) {
+  const discoveredPrinters = parseDiscoveredPrinters(printers);
+  const seenAt = now();
+  const db = getSupabase();
+  if (db) {
+    const tokenHash = hashTrackingToken(token);
+    const existing = await db.from("print_agents").select("id").eq("token_hash", tokenHash).maybeSingle();
+    const payload = {
+      name: agentId,
+      token_hash: tokenHash,
+      token_prefix: token.slice(0, 8),
+      capabilities: { printers: discoveredPrinters },
+      last_seen_at: seenAt,
+      is_active: true,
+    };
+    const result = existing.data?.id
+      ? await db.from("print_agents").update(payload).eq("id", existing.data.id)
+      : await db.from("print_agents").upsert(payload, { onConflict: "name" });
+    if (result.error) throw new Error("Não foi possível registrar as impressoras do computador.");
+  }
+  memory.discoveredPrinters = discoveredPrinters;
+  memory.printAgentId = agentId;
+  memory.printAgentLastSeenAt = seenAt;
+  return { printers: discoveredPrinters, lastSeenAt: seenAt };
 }
 
 export async function updateDefaultDeliveryFee(defaultDeliveryFeeCents: number) {
@@ -1381,7 +1507,8 @@ export async function requeuePrintJob(orderId: string, printerId?: string) {
 
   const db = getSupabase();
   if (db) {
-    const selectedPrinterId = printerId && isConfiguredPrinter(printerId) ? printerId : defaultPrinterId();
+    const printerSettings = await getPrintSettings();
+    const selectedPrinterId = printerId && printerSettings.printers.some((printer) => printer.id === printerId) ? printerId : printerSettings.selectedPrinterId;
     const { error } = await db.from("print_jobs").upsert(
       {
         order_id: orderId,
@@ -1406,9 +1533,11 @@ export async function requeuePrintJob(orderId: string, printerId?: string) {
     existing.attempts = 0;
     existing.leaseToken = undefined;
     existing.leaseExpiresAt = undefined;
-    existing.printerId = printerId && isConfiguredPrinter(printerId) ? printerId : memory.selectedPrinterId;
+    const printerSettings = await getPrintSettings();
+    existing.printerId = printerId && printerSettings.printers.some((printer) => printer.id === printerId) ? printerId : printerSettings.selectedPrinterId;
   } else {
-    memory.printJobs.push({ id: newOrderId(), orderId, status: "queued", attempts: 0, printerId: printerId && isConfiguredPrinter(printerId) ? printerId : memory.selectedPrinterId });
+    const printerSettings = await getPrintSettings();
+    memory.printJobs.push({ id: newOrderId(), orderId, status: "queued", attempts: 0, printerId: printerId && printerSettings.printers.some((printer) => printer.id === printerId) ? printerId : printerSettings.selectedPrinterId });
   }
   const memoryOrder = memory.orders.find((candidate) => candidate.id === orderId);
   if (memoryOrder) memoryOrder.printStatus = "queued";

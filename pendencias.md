@@ -16,3 +16,6 @@
 - Para listar mais de uma impressora no painel, cadastrar apenas IDs e nomes em
   `PRINT_PRINTER_OPTIONS` e os respectivos enderecos locais em `agent/.env` usando
   `PRINTER_PROFILES_JSON`. A impressora padrão continua compatível sem configuração extra.
+- No Windows, o agente local precisa permanecer em execução para que a lista de impressoras
+  instaladas apareça no painel e para que o spooler receba os tickets.
+- A conta/serviço do Windows precisa ter permissão para imprimir na impressora escolhida.
