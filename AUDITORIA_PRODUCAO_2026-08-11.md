@@ -3,6 +3,7 @@
 Data: 2026-08-11
 Escopo: aplicacao Next.js, APIs, Supabase/PostgreSQL, Vercel, autenticacao,
 pagamentos, imagens, impressao local, performance e validacao do storefront.
+Commit publicado: `fac27aa`.
 
 ## Resultado executivo
 
@@ -10,6 +11,7 @@ pagamentos, imagens, impressao local, performance e validacao do storefront.
 - O alias publico `https://dogchef-one.vercel.app/` foi usado para validar a interface.
 - O deployment direto da Vercel continua sujeito a protecao de acesso da conta; isso e
   uma politica da Vercel, nao um erro do aplicativo.
+- O deployment do commit `fac27aa` foi marcado como `success` pela Vercel.
 - Nao foram criados pedidos, clientes, pagamentos ou alteracoes remotas durante a auditoria.
 - A aplicacao tem persistencia de pedido antes da impressao, rate limiting por rota,
   RLS restritiva e validacao de entrada com Zod.

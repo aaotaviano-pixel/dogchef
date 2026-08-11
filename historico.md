@@ -120,3 +120,4 @@
   deduplicacao de entrega e consulta direta do pedido.
 - Pagamento ja aprovado nao pode ser rebaixado por notificacao atrasada.
 - Relatorio completo registrado em `AUDITORIA_PRODUCAO_2026-08-11.md` e no Segundo Cerebro.
+- Commit `fac27aa` enviado ao GitHub e deployment da Vercel marcado como `success`.
