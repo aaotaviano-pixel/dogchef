@@ -308,6 +308,8 @@ a { color: inherit; text-decoration: none; }
 .print-selector span { color: #6d5e55; font-size: 10px; font-weight: 800; }
 .print-selector select { min-height: 38px; padding: 0 10px; border: 1px solid #d9d2e9; border-radius: 8px; color: #41365c; background: #fff; font-size: 12px; font-weight: 700; }
 .print-selector select:focus { border-color: var(--brand-red); outline: 2px solid rgba(214,64,44,.15); }
+.print-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 18px; }
+.print-actions .button { min-height: 36px; padding: 8px 11px; font-size: 10px; }
 .print-jobs { display: grid; gap: 7px; margin-top: 10px; }
 .print-jobs article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid #e6ddd7; border-radius: 9px; background: white; }
 .print-jobs article > div { min-width: 0; }

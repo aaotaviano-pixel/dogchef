@@ -241,15 +241,46 @@ O agente em `agent/index.ts` é executado no computador da cozinha. Ele consulta
    - USB compartilhada no Windows: `PRINTER_TRANSPORT=windows-share` e `PRINTER_SHARE=\\SERVIDOR\\NOME_DA_IMPRESSORA`.
 4. No Windows, o agente consulta as impressoras instaladas e as envia ao painel como opções com estado e impressora padrão. A seleção usa o spooler RAW do Windows, sem exigir que a administradora descubra IP ou compartilhamento.
 5. Para impressoras de rede ou computadores não Windows, configure no ambiente da aplicação uma lista pública apenas de IDs e nomes em `PRINT_PRINTER_OPTIONS`, por exemplo `[{"id":"cozinha","name":"Impressora da cozinha"}]`, e os endereços locais em `PRINTER_PROFILES_JSON` dentro de `agent/.env`.
-6. Abra o painel, entre em **Impressão** e selecione uma impressora. A escolha fica salva neste navegador e é enviada junto aos próximos tickets; endereços e credenciais continuam somente no agente local.
-6. Mantenha o processo em execução:
+6. Para IPP, use um perfil local como `{"id":"ipp-virtual","name":"IPP virtual de teste","transport":"ipp","ippUri":"http://192.168.1.11:10631/p/virtual","ippDocumentFormat":"text/plain"}`. Esse endereço nunca deve ser colocado na Vercel.
+7. Abra o painel, entre em **Impressão** e selecione uma impressora. A escolha fica salva neste navegador e é enviada junto aos próximos tickets; endereços e credenciais continuam somente no agente local.
+8. Mantenha o processo em execução:
 
 ```powershell
 cd C:\DOGCHEF
 npm run print-agent
 ```
 
+Antes de aceitar pedidos, valide a instalação sem criar pedido no sistema:
+
+```powershell
+npm run print-agent:list
+npm run print-agent:test -- --printer-id windows-nome-da-impressora-xxxxxxxx
+npm run print-agent:diagnose -- --ipp-url http://192.168.1.11:10631/p/virtual
+npm run print-agent:test -- --ipp-url http://192.168.1.11:10631/p/virtual
+```
+
+O primeiro comando mostra o nome, ID e estado informados pelo Windows. O segundo envia
+um ticket de teste diretamente à impressora escolhida. `print-agent:diagnose` executa a
+verificação de protocolo sem imprimir; para a IPP virtual, `--ipp-url` faz o acesso partir
+do computador local, nunca da Vercel. Para uma impressora instalada no Windows, não é
+necessário informar IP; para uma impressora TCP não instalada no Windows, configure o
+perfil com host e porta antes do teste.
+
 O token do agente deve ser longo, aleatório e exclusivo. Em produção, execute-o como serviço do Windows ou tarefa agendada, com reinício automático, e faça um teste de ticket antes do horário de atendimento. Falhas transitórias são tentadas novamente até cinco vezes; depois disso, o painel permite reimpressão manual.
+
+O painel administrativo também oferece **Testar impressão**, que cria somente um trabalho
+de diagnóstico na fila, sem criar pedido falso. O pedido continua independente da fila:
+se a impressora estiver desligada, o pedido permanece salvo e pode ser reimpresso depois.
+
+O agente não abre servidor HTTP/WS local e não depende de CORS ou mixed content: ele faz
+polling autenticado HTTPS para a Vercel e a conexão com USB, spooler, TCP ou IPP parte
+sempre do computador local. Os eventos operacionais são emitidos como JSON no stdout,
+incluindo `PRINT_SERVICE_CONNECTED`, `IPP_JOB_ACCEPTED`, `PRINT_JOB_SUCCESS`,
+`PRINT_JOB_FAILED`, `PRINTER_DISCOVERY`, `IPP_CONNECTED`, `IPP_TIMEOUT` e
+`PRINT_SERVICE_DISCONNECTED`.
+
+A suíte do agente cobre cinco cenários do protocolo IPP: montagem das requisições,
+decodificação de resposta, request HTTP local, erro de status IPP e timeout.
 
 ## Indicadores do painel
 

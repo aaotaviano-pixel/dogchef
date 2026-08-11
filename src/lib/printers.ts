@@ -3,7 +3,7 @@ import { z } from "zod";
 const printerSchema = z.object({
   id: z.string().trim().min(1).max(60).regex(/^[a-zA-Z0-9_-]+$/),
   name: z.string().trim().min(1).max(80),
-  transport: z.enum(["tcp", "windows-share"]).optional(),
+  transport: z.enum(["tcp", "windows-share", "ipp"]).optional(),
 });
 
 const discoveredPrinterSchema = z.object({

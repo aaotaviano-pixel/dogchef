@@ -11,6 +11,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { getPrinterAttributesRequest, ippRequest, ippStatusText, printJobRequest } from "./ipp";
+
 type TicketLine = { productName: string; quantity: number; optionals: { name: string }[]; note?: string };
 type Ticket = {
   printerId?: string;
@@ -28,11 +30,13 @@ type Job = { id: string; leaseToken: string; payload: Ticket };
 type PrinterProfile = {
   id: string;
   name: string;
-  transport: "tcp" | "windows-share" | "windows-raw";
+  transport: "tcp" | "windows-share" | "windows-raw" | "ipp";
   host?: string;
   port?: number;
   share?: string;
   windowsName?: string;
+  ippUri?: string;
+  ippDocumentFormat?: string;
   status?: "ready" | "offline" | "unknown";
   isDefault?: boolean;
 };
@@ -40,6 +44,10 @@ type PrinterProfile = {
 const execFileAsync = promisify(execFile);
 const agentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const spoolDirectory = path.join(agentDirectory, "print-spool");
+
+function logEvent(event: string, details: Record<string, unknown> = {}) {
+  console.log(JSON.stringify({ at: new Date().toISOString(), event, ...details }));
+}
 
 async function loadDotEnv() {
   try {
@@ -71,7 +79,7 @@ function printerProfiles(): PrinterProfile[] {
     return parsed.filter((profile): profile is PrinterProfile => {
       if (!profile || typeof profile !== "object") return false;
       const value = profile as Record<string, unknown>;
-      return typeof value.id === "string" && typeof value.name === "string" && (value.transport === "tcp" || value.transport === "windows-share" || value.transport === "windows-raw");
+      return typeof value.id === "string" && typeof value.name === "string" && (value.transport === "tcp" || value.transport === "windows-share" || value.transport === "windows-raw" || value.transport === "ipp");
     });
   } catch {
     throw new Error("PRINTER_PROFILES_JSON inválido.");
@@ -236,6 +244,7 @@ public static class DogChefRawPrinter {
     } finally { ClosePrinter(printer); }
   }
 }
+
 "@
 [DogChefRawPrinter]::Send($env:DOGCHEF_PRINTER_NAME, $env:DOGCHEF_SPOOL_FILE)
 `;
@@ -246,9 +255,20 @@ public static class DogChefRawPrinter {
   });
 }
 
-async function printTicket(ticket: Ticket, jobId: string) {
+async function printIpp(data: Buffer, jobId: string, profile: PrinterProfile) {
+  const uri = profile.ippUri || requireEnvironment("PRINTER_IPP_URI");
+  const documentFormat = profile.ippDocumentFormat || process.env.PRINTER_IPP_DOCUMENT_FORMAT || "application/octet-stream";
+  const response = await ippRequest(uri, printJobRequest(uri, data, documentFormat));
+  logEvent("IPP_JOB_ACCEPTED", { jobId, printer: profile.name, status: ippStatusText(response.statusCode) });
+}
+
+async function printTicket(ticket: Ticket, jobId: string, directProfile?: PrinterProfile) {
+  const profile = directProfile ?? await selectedPrinter(ticket);
   const data = escpos(ticket, jobId);
-  const profile = await selectedPrinter(ticket);
+  if (profile.transport === "ipp") {
+    await printIpp(data, jobId, profile);
+    return;
+  }
   if (profile.transport === "windows-raw") {
     await printWindowsRaw(data, jobId, profile);
     return;
@@ -287,37 +307,151 @@ async function complete(job: Job, result: "printed" | "failed", error?: string) 
   await request(`/api/v1/print-agent/jobs/${job.id}/complete`, { leaseToken: job.leaseToken, result, error });
 }
 
+function argumentValue(name: string) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : undefined;
+}
+
+async function listPrinters() {
+  await loadDotEnv();
+  const installed = await discoverInstalledPrinters();
+  const profiles = installed.length ? installed : printerProfiles();
+  logEvent("PRINTER_DISCOVERY", { count: profiles.length, source: installed.length ? "windows" : "configured" });
+  if (!profiles.length) {
+    console.log("Nenhuma impressora foi encontrada. Instale a impressora no Windows ou configure PRINTER_PROFILES_JSON.");
+    return;
+  }
+  console.log("Impressoras reconhecidas pelo agente:");
+  for (const printer of profiles) {
+    const state = printer.status === "offline" ? "offline" : printer.status === "ready" ? "pronta" : "estado desconhecido";
+    console.log(`- ${printer.name} | id=${printer.id} | ${state}${printer.isDefault ? " | padrão" : ""}`);
+  }
+}
+
+async function printTest() {
+  await loadDotEnv();
+  const installed = await discoverInstalledPrinters();
+  const profiles = installed.length ? installed : printerProfiles();
+  const requestedId = argumentValue("--printer-id");
+  const ippUri = argumentValue("--ipp-url");
+  const overrideProfile = ippUri ? { id: "ipp-command-line", name: `IPP ${ippUri}`, transport: "ipp" as const, ippUri, ippDocumentFormat: "text/plain" } : undefined;
+  const printerId = requestedId || overrideProfile?.id || profiles[0]?.id;
+  if (!printerId) throw new Error("Nenhuma impressora encontrada. Rode --list ou configure PRINTER_PROFILES_JSON.");
+  const profile = overrideProfile ?? await selectedPrinter({ printerId, publicCode: "TESTE", createdAt: new Date().toISOString(), customerName: "Teste DogChef", customerPhone: "", deliveryType: "pickup", items: [], totalCents: 0, paymentMethod: "cash" });
+  console.log(`Enviando teste para ${profile.name} (${profile.id})...`);
+  const jobId = `teste-${Date.now()}`;
+  try {
+    await printTicket({
+      printerId: profile.id,
+      publicCode: "TESTE",
+      createdAt: new Date().toISOString(),
+      customerName: "Teste DogChef",
+      customerPhone: "",
+      deliveryType: "pickup",
+      items: [{ productName: "Teste de impressão", quantity: 1, optionals: [], note: "Se este papel saiu, a conexão está funcionando." }],
+      totalCents: 0,
+      paymentMethod: "cash",
+    }, jobId, profile);
+  } catch (error) {
+    logEvent("PRINT_JOB_FAILED", { jobId, printer: profile.name, error: error instanceof Error ? error.message.slice(0, 450) : "Erro desconhecido" });
+    throw error;
+  }
+  logEvent("PRINT_JOB_SUCCESS", { jobId, printer: profile.name, protocol: profile.transport });
+  console.log("Teste enviado com sucesso.");
+}
+
+async function diagnosePrinter() {
+  await loadDotEnv();
+  const installed = await discoverInstalledPrinters();
+  const profiles = installed.length ? installed : printerProfiles();
+  const requestedId = argumentValue("--printer-id");
+  const ippUri = argumentValue("--ipp-url");
+  const overrideProfile = ippUri ? { id: "ipp-command-line", name: `IPP ${ippUri}`, transport: "ipp" as const, ippUri } : undefined;
+  const profile = overrideProfile ?? profiles.find((printer) => printer.id === requestedId) ?? profiles[0];
+  if (!profile) throw new Error("Nenhuma impressora encontrada. Rode --list ou configure um perfil.");
+  console.log(`Impressora: ${profile.name}`);
+  console.log(`ID: ${profile.id}`);
+  console.log(`Transporte: ${profile.transport}`);
+  if (profile.transport === "windows-raw") {
+    if (profile.status === "offline") logEvent("PRINTER_OFFLINE", { printer: profile.name });
+    else logEvent("PRINTER_CONNECTION", { printer: profile.name, protocol: "windows-spooler" });
+    console.log(`Windows: ${profile.status === "offline" ? "offline" : "reconhecida pelo spooler"}`);
+    return;
+  }
+  if (profile.transport === "tcp") {
+    const host = profile.host || requireEnvironment("PRINTER_HOST");
+    const port = Number(profile.port || process.env.PRINTER_PORT || "9100");
+    await new Promise<void>((resolve, reject) => {
+      const socket = net.createConnection({ host, port });
+      const timer = setTimeout(() => { socket.destroy(); reject(new Error("Timeout TCP.")); }, 8_000);
+      socket.once("error", (error) => { clearTimeout(timer); reject(error); });
+      socket.once("connect", () => { clearTimeout(timer); socket.end(); resolve(); });
+    });
+    logEvent("PRINTER_CONNECTION", { printer: profile.name, protocol: "tcp", host, port });
+    console.log(`TCP: conectado em ${host}:${port}`);
+    return;
+  }
+  if (profile.transport === "windows-share") {
+    console.log(`Compartilhamento: ${profile.share || process.env.PRINTER_SHARE || "não configurado"}`);
+    return;
+  }
+  const uri = profile.ippUri || requireEnvironment("PRINTER_IPP_URI");
+  try {
+    const response = await ippRequest(uri, getPrinterAttributesRequest(uri));
+    logEvent("IPP_CONNECTED", { printer: profile.name, uri, status: ippStatusText(response.statusCode) });
+    console.log(`IPP: ${uri}`);
+    console.log(`IPP status: ${ippStatusText(response.statusCode)}`);
+    console.log("IPP Get-Printer-Attributes: aceito");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha IPP";
+    logEvent(message.includes("Tempo limite") ? "IPP_TIMEOUT" : "PRINTER_CONNECTION_FAILED", { printer: profile.name, uri, error: message.slice(0, 450) });
+    throw error;
+  }
+}
+
 async function run() {
   await loadDotEnv();
   const agentId = process.env.PRINT_AGENT_ID || `cozinha-${os.hostname()}`;
-  console.log(`DogChef Print Agent conectado como ${agentId}.`);
+  logEvent("PRINT_SERVICE_STARTED", { agentId });
+  let serviceConnected = false;
   let backoff = 2_500;
   for (;;) {
     try {
       const discoveredPrinters = await discoverInstalledPrinters();
       const advertisedPrinters = discoveredPrinters.length ? discoveredPrinters : printerProfiles();
       await request("/api/v1/print-agent/heartbeat", { agentId, printers: heartbeatPrinters(advertisedPrinters) });
+      if (!serviceConnected) {
+        serviceConnected = true;
+        logEvent("PRINT_SERVICE_CONNECTED", { agentId, printers: advertisedPrinters.length });
+      }
       const result = await request("/api/v1/print-agent/jobs/claim", { agentId, limit: 1 });
       const jobs = Array.isArray(result.jobs) ? result.jobs as Job[] : [];
+      if (jobs.length) logEvent("PRINT_JOB_CREATED", { count: jobs.length });
       for (const job of jobs) {
         try {
           if (!await wasPrinted(job.id)) { await printTicket(job.payload, job.id); await markPrinted(job.id); }
           await complete(job, "printed");
-          console.log(`Impresso: ${job.id}`);
+          logEvent("PRINT_JOB_SUCCESS", { jobId: job.id, printer: job.payload.printerId });
         } catch (error) {
           const message = error instanceof Error ? error.message.slice(0, 450) : "Erro desconhecido de impressão";
           await complete(job, "failed", message).catch(() => undefined);
-          console.error(`Falha ao imprimir ${job.id}: ${message}`);
+          logEvent("PRINT_JOB_FAILED", { jobId: job.id, error: message });
         }
       }
       backoff = jobs.length ? 1_000 : 3_000;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Erro de comunicação";
-      console.error(`Agente aguardando nova tentativa: ${message}`);
+      if (serviceConnected) {
+        serviceConnected = false;
+        logEvent("PRINT_SERVICE_DISCONNECTED", { reason: message.slice(0, 250) });
+      }
+      logEvent("PRINT_SERVICE_RETRY", { reason: message.slice(0, 250) });
       backoff = Math.min(backoff * 2, 30_000);
     }
     await new Promise((resolve) => setTimeout(resolve, backoff));
   }
 }
 
-void run().catch((error) => { console.error(error); process.exitCode = 1; });
+const command = process.argv.find((argument) => argument === "--list" || argument === "--test" || argument === "--diagnose");
+const commandTask = command === "--list" ? listPrinters() : command === "--test" ? printTest() : command === "--diagnose" ? diagnosePrinter() : run();
+void commandTask.catch((error) => { console.error(error); process.exitCode = 1; });

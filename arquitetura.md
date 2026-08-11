@@ -62,6 +62,20 @@ shares e qualquer detalhe de rede continuam fora do banco e do frontend. Sem des
 o agente usa perfis `PRINTER_PROFILES_JSON` ou a configuracao legada `PRINTER_TRANSPORT`,
 `PRINTER_HOST`, `PRINTER_PORT` ou `PRINTER_SHARE`.
 
+Os comandos `print-agent:list` e `print-agent:test` fazem diagnostico local sem criar
+pedido ou inserir trabalho na fila da aplicacao.
+
+O botao **Testar impressao** do painel cria um `print_jobs.kind = 'test'` com `order_id`
+nulo. A migration `20260810030000_print_test_jobs.sql` permite esse job diagnostico sem
+fake order; o mesmo agente autenticado consome e confirma o resultado. Falha de impressao
+nao altera o pedido nem bloqueia o checkout.
+
+O agente nao abre servidor HTTP/WS local e nao depende de CORS ou mixed content: ele faz
+polling autenticado HTTPS para a Vercel e a conexao com USB, spooler, TCP ou IPP parte
+sempre do computador local. Os eventos operacionais sao emitidos como JSON no stdout,
+incluindo `PRINT_SERVICE_CONNECTED`, `IPP_JOB_ACCEPTED`, `PRINT_JOB_SUCCESS`,
+`PRINT_JOB_FAILED` e `PRINT_SERVICE_DISCONNECTED`.
+
 ## Indicadores administrativos
 
 `resetDashboardMetrics` registra um evento `dashboard_metrics_reset` no `audit_log`. O painel

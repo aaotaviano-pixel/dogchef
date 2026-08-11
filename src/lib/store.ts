@@ -10,14 +10,28 @@ import { normalizeNeighborhood } from "@/lib/shop";
 import { getSupabase, hasSupabase } from "@/lib/supabase";
 import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, PrintSettings, Product, ProductImage, ProductInput, PrinterOption, WorkingHour } from "@/lib/types";
 
+type PrintTicketPayload = {
+  printerId: string;
+  publicCode: string;
+  createdAt: string;
+  customerName: string;
+  customerPhone: string;
+  deliveryType: "delivery" | "pickup";
+  address?: Order["customer"]["address"];
+  items: Order["quote"]["items"];
+  totalCents: number;
+  paymentMethod: string;
+};
+
 type PrintJob = {
   id: string;
-  orderId: string;
+  orderId?: string;
   status: "queued" | "leased" | "printed" | "failed" | "dead";
   leaseToken?: string;
   leaseExpiresAt?: number;
   attempts: number;
   printerId?: string;
+  payload?: PrintTicketPayload;
 };
 
 type StoredCustomerAccount = CustomerAccount & { passwordHash?: string; authUserId?: string };
@@ -1418,7 +1432,7 @@ export async function updateWorkingHours(workingHours: WorkingHour[]) {
   return memory.workingHours;
 }
 
-function ticketPayload(order: Order, printerId?: string) {
+function ticketPayload(order: Order, printerId?: string): PrintTicketPayload {
   return {
     printerId: printerId ?? defaultPrinterId(),
     publicCode: order.publicCode,
@@ -1431,6 +1445,36 @@ function ticketPayload(order: Order, printerId?: string) {
     totalCents: order.quote.totalCents,
     paymentMethod: order.paymentMethod,
   };
+}
+
+export async function createPrintTestJob(printerId?: string) {
+  const settings = await getPrintSettings();
+  const selectedPrinterId = printerId && settings.printers.some((printer) => printer.id === printerId) ? printerId : settings.selectedPrinterId;
+  const createdAt = now();
+  const payload: PrintTicketPayload = {
+    printerId: selectedPrinterId,
+    publicCode: "TESTE",
+    createdAt,
+    customerName: "Teste DogChef",
+    customerPhone: "",
+    deliveryType: "pickup",
+    items: [{ productId: "print-test", productName: "Teste de impressão", quantity: 1, unitPriceCents: 0, optionals: [], totalCents: 0, note: "Se este papel saiu, a conexão está funcionando." }],
+    totalCents: 0,
+    paymentMethod: "cash",
+  };
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("print_jobs")
+      .insert({ order_id: null, kind: "test", status: "queued", payload, attempts: 0, error: null, completed_at: null })
+      .select("id")
+      .single();
+    if (error || !data) throw new Error("Não foi possível colocar o teste na fila. A migração de teste de impressão ainda pode estar pendente.");
+    return { id: String(data.id), status: "queued" as const, printerId: selectedPrinterId };
+  }
+  const id = newOrderId();
+  memory.printJobs.push({ id, status: "queued", attempts: 0, printerId: selectedPrinterId, payload });
+  return { id, status: "queued" as const, printerId: selectedPrinterId };
 }
 
 export async function claimPrintJobs(agentId: string, limit = 1) {
@@ -1455,8 +1499,9 @@ export async function claimPrintJobs(agentId: string, limit = 1) {
     job.leaseToken = newTrackingToken();
     job.leaseExpiresAt = nowMillis + 60_000;
     job.attempts += 1;
-    const order = memory.orders.find((candidate) => candidate.id === job.orderId)!;
-    return { id: job.id, leaseToken: job.leaseToken, leaseExpiresAt: new Date(job.leaseExpiresAt).toISOString(), agentId, payload: ticketPayload(order, job.printerId) };
+    const order = job.orderId ? memory.orders.find((candidate) => candidate.id === job.orderId) : undefined;
+    if (!job.payload && !order) throw new Error("Trabalho de impressão sem pedido ou conteúdo.");
+    return { id: job.id, leaseToken: job.leaseToken, leaseExpiresAt: new Date(job.leaseExpiresAt).toISOString(), agentId, payload: job.payload ?? ticketPayload(order!, job.printerId) };
   });
 }
 

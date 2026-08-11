@@ -95,6 +95,10 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
 - `PRINT_PRINTER_OPTIONS` e `PRINTER_PROFILES_JSON` permanecem como fallback para rede,
   compartilhamento e ambientes sem descoberta automatica.
 - O painel salva a escolha no navegador e envia o ID junto ao ticket.
+- Perfis `transport=ipp` sao resolvidos somente pelo agente local; URI IPP nunca vai para
+  variavel `NEXT_PUBLIC_` nem e acessada pelo servidor Vercel.
+- O botao **Testar impressao** usa `print_jobs.kind=test` e `order_id=null` apos a migration
+  aditiva; nao criar pedido falso para testar hardware.
 
 ## Indicadores
 

@@ -401,6 +401,35 @@ export function AdminDashboard() {
     }
   }
 
+  async function testSelectedPrinter() {
+    setBusyId("printer-test");
+    try {
+      const response = await fetch("/api/v1/admin/settings/printer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ selectedPrinterId: data?.print.selectedPrinterId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Não foi possível enviar o teste para a impressora.");
+      setNotice(data?.print.agentConnected ? "Teste enviado para a impressora selecionada." : "Teste colocado na fila. Inicie o agente local para imprimir.");
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível testar a impressora.");
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function refreshPrinterState(message = "Lista de impressoras atualizada.") {
+    setBusyId("printer-refresh");
+    try {
+      await load();
+      setNotice(message);
+    } finally {
+      setBusyId("");
+    }
+  }
+
   async function saveDefaultDeliveryFee() {
     const cents = defaultFeeDraft === null ? null : feeCents(defaultFeeDraft);
     if (cents === null) return setError("Informe uma taxa padrão válida.");
@@ -601,6 +630,7 @@ export function AdminDashboard() {
         {activePanel === "print" && <section className="admin-panel-view admin-section print-section">
           <div className="section-heading"><div><p className="eyebrow">Impressão térmica</p><h2>Escolha onde imprimir</h2></div><span className="integration-chip"><Printer size={15}/>{data.print.agentConnected ? "Windows conectado" : "agente local"}</span></div>
           <div className="print-card"><Printer size={26}/><div><b>Impressora dos próximos pedidos</b><p>{data.print.agentConnected ? `O Windows informou ${data.print.printers.length} impressora${data.print.printers.length === 1 ? " instalada" : "s instaladas"} neste computador.` : "Abra o agente local no computador da cozinha para reconhecer automaticamente as impressoras instaladas no Windows."}</p><label className="print-selector"><span>Imprimir em</span><select value={data.print.selectedPrinterId} disabled={busyId === "printer"} onChange={(event) => void saveSelectedPrinter(event.target.value)}>{data.print.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}{printer.isDefault ? " · padrão" : ""}{printer.status === "offline" ? " · offline" : ""}</option>)}</select></label></div><code>npm run print-agent</code></div>
+          <div className="print-actions"><button className="button button-dark" disabled={busyId === "printer-test"} onClick={() => void testSelectedPrinter()}><Printer size={15}/>{busyId === "printer-test" ? "Enviando..." : "Testar impressão"}</button><button className="button button-ghost" disabled={busyId === "printer-refresh"} onClick={() => void refreshPrinterState()}><RefreshCw size={15}/>Atualizar impressoras</button><button className="button button-ghost" disabled={busyId === "printer-refresh"} onClick={() => void refreshPrinterState(data.print.agentConnected ? "Agente local conectado e lista recebida do Windows." : "Agente local não conectado. Abra o serviço na máquina da cozinha.")}><CircleAlert size={15}/>Diagnosticar</button></div>
           {printOrders.length > 0 && <div className="print-jobs">{printOrders.map((order) => <article key={order.id}><div><b>{order.publicCode}</b><small>{order.customer.name}</small></div><span className={`print-status ${order.printStatus}`}>{printLabels[order.printStatus!]}</span><button className="button button-dark" disabled={busyId === `print-${order.id}`} onClick={() => void reprintOrder(order)}><Printer size={14}/>{order.printStatus === "printed" ? "Reimprimir" : "Tentar novamente"}</button></article>)}</div>}
         </section>}
       </section>

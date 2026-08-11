@@ -6,9 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "tsx --test agent/ipp.test.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "print-agent": "tsx agent/index.ts"
+    "print-agent": "tsx agent/index.ts",
+    "print-agent:list": "tsx agent/index.ts --list",
+    "print-agent:test": "tsx agent/index.ts --test",
+    "print-agent:diagnose": "tsx agent/index.ts --diagnose"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.111.0",

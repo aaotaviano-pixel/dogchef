@@ -93,3 +93,17 @@
 - O agente Windows passou a descobrir impressoras instaladas via `Win32_Printer`.
 - A lista descoberta, estado e impressora padrao sao exibidos no painel pela tabela `print_agents`.
 - Tickets para impressoras descobertas usam o spooler RAW do Windows; perfis TCP e compartilhados continuam suportados.
+- Adicionados os comandos locais `print-agent:list` e `print-agent:test` para validar a impressora sem pedido falso.
+- Adicionado o botão administrativo **Testar impressão**, com job diagnóstico separado de pedidos.
+- Adicionado cliente IPP local com Get-Printer-Attributes, Print-Job, timeout e logs estruturados.
+
+## 2026-08-10 — Sistema local de impressão e IPP
+
+- A Vercel não acessa USB, spooler ou `192.168.1.11`; a impressão fica no agente local
+  autenticado, com polling HTTPS e sem porta localhost aberta.
+- IPP virtual testada com TCP, Get-Printer-Attributes e Print-Job reais, todos aceitos;
+  a porta errada produziu timeout tratado.
+- Suíte automatizada ampliada para cinco testes, cobrindo montagem, parser, request local,
+  erro de status IPP e timeout.
+- Criada a migration `20260810030000_print_test_jobs.sql` para o botão de teste sem pedido
+  falso; aplicação remota continua pendente de autenticação no Supabase.

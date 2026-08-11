@@ -19,3 +19,7 @@
 - No Windows, o agente local precisa permanecer em execução para que a lista de impressoras
   instaladas apareça no painel e para que o spooler receba os tickets.
 - A conta/serviço do Windows precisa ter permissão para imprimir na impressora escolhida.
+- A migration `20260810030000_print_test_jobs.sql` precisa estar aplicada no Supabase remoto
+  para habilitar o botão **Testar impressão** do painel sem criar pedido de teste.
+- A impressora IPP virtual `http://192.168.1.11:10631/p/virtual` só é acessível a computadores
+  na mesma rede; a Vercel não deve e não consegue acessá-la diretamente.
