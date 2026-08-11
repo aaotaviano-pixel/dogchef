@@ -105,5 +105,7 @@
   a porta errada produziu timeout tratado.
 - Suíte automatizada ampliada para cinco testes, cobrindo montagem, parser, request local,
   erro de status IPP e timeout.
+- Adicionados scripts `agent/install-windows.ps1` e `agent/uninstall-windows.ps1` para
+  inicialização automática do agente no usuário atual, com reinício no Agendador de Tarefas.
 - Criada a migration `20260810030000_print_test_jobs.sql` para o botão de teste sem pedido
   falso; aplicação remota continua pendente de autenticação no Supabase.

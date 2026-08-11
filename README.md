@@ -268,6 +268,21 @@ perfil com host e porta antes do teste.
 
 O token do agente deve ser longo, aleatório e exclusivo. Em produção, execute-o como serviço do Windows ou tarefa agendada, com reinício automático, e faça um teste de ticket antes do horário de atendimento. Falhas transitórias são tentadas novamente até cinco vezes; depois disso, o painel permite reimpressão manual.
 
+Para registrar a inicialização automática no Windows, depois de configurar `agent/.env`,
+execute uma vez:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\agent\install-windows.ps1
+```
+
+O script cria a tarefa **DogChef Print Agent** para o usuário atual, inicia o agente no
+login do Windows e solicita reinício automático em caso de falha. Ele não abre uma porta
+local nem expõe a impressora na internet. Para remover a tarefa:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\agent\uninstall-windows.ps1
+```
+
 O painel administrativo também oferece **Testar impressão**, que cria somente um trabalho
 de diagnóstico na fila, sem criar pedido falso. O pedido continua independente da fila:
 se a impressora estiver desligada, o pedido permanece salvo e pode ser reimpresso depois.

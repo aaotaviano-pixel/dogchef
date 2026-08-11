@@ -23,3 +23,5 @@
   para habilitar o botão **Testar impressão** do painel sem criar pedido de teste.
 - A impressora IPP virtual `http://192.168.1.11:10631/p/virtual` só é acessível a computadores
   na mesma rede; a Vercel não deve e não consegue acessá-la diretamente.
+- Depois de preencher `agent/.env` na máquina real, executar uma vez
+  `agent/install-windows.ps1` para registrar a inicialização automática do agente.
