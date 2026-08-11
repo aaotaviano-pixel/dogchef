@@ -104,3 +104,10 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
 
 - Para zerar somente os numeros exibidos, usar o marco auditavel de `dashboard_metrics_reset`.
 - Nunca apagar ou sobrescrever pedidos, pagamentos ou clientes para limpar um dashboard.
+
+## Pagamentos
+
+- Validar assinatura, timestamp, pedido, moeda e valor antes de processar webhook.
+- Registrar e deduplicar entregas; consultar o pedido diretamente, sem carregar a lista
+  administrativa inteira.
+- Nunca rebaixar pagamento aprovado por evento atrasado.

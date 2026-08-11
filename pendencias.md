@@ -25,3 +25,13 @@
   na mesma rede; a Vercel não deve e não consegue acessá-la diretamente.
 - Depois de preencher `agent/.env` na máquina real, executar uma vez
   `agent/install-windows.ps1` para registrar a inicialização automática do agente.
+
+## Auditoria de 2026-08-11
+
+- A migration `20260810030000_print_test_jobs.sql` ainda depende de autenticacao na CLI
+  Supabase; nao foi executada automaticamente para nao expor token.
+- Pagamentos reais dependem das credenciais Mercado Pago da cliente; SMTP e WhatsApp
+  comercial tambem permanecem externos ao codigo.
+- O deployment direto pode exibir protecao da Vercel para a conta; o alias publico foi
+  usado para o smoke test.
+- O relatorio tecnico esta em `AUDITORIA_PRODUCAO_2026-08-11.md`.

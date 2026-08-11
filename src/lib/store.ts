@@ -691,6 +691,23 @@ export async function getOrder(publicCode: string, trackingToken?: string, custo
   )) ?? null;
 }
 
+// Internal payment callbacks should address one order directly instead of loading
+// the latest admin order page and scanning it in memory.
+export async function getOrderById(orderId: string) {
+  const db = getSupabase();
+  if (db) {
+    const { data, error } = await db
+      .from("orders")
+      .select("*, order_items(*), order_events(*), print_jobs(status)")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (error) throw new Error("Não foi possível consultar o pedido.");
+    return data ? mapRemoteOrder(data as Record<string, unknown>) : null;
+  }
+  await ensureLocalCommerceLoaded();
+  return deepCopy(memory.orders.find((order) => order.id === orderId) ?? null);
+}
+
 export async function listCustomerOrders(customerId: string) {
   const db = getSupabase();
   if (db) {
@@ -705,6 +722,67 @@ export async function listCustomerOrders(customerId: string) {
   }
   await ensureLocalCommerceLoaded();
   return deepCopy(memory.orders.filter((order) => order.customerId === customerId));
+}
+
+type PaymentWebhookDeliveryInput = {
+  provider: string;
+  requestId?: string;
+  paymentId: string;
+  payloadHash: string;
+};
+
+export async function registerPaymentWebhookDelivery(input: PaymentWebhookDeliveryInput) {
+  const db = getSupabase();
+  if (!db) return { id: undefined, duplicate: false, processedAt: undefined };
+
+  const { data, error } = await db
+    .from("payment_webhook_deliveries")
+    .insert({
+      provider: input.provider,
+      request_id: input.requestId || null,
+      payment_id: input.paymentId,
+      signature_valid: true,
+      payload_hash: input.payloadHash,
+    })
+    .select("id, processed_at")
+    .single();
+
+  if (!error && data) {
+    return { id: String(data.id), duplicate: false, processedAt: data.processed_at as string | null | undefined };
+  }
+  if (error?.code !== "23505") throw new Error("Não foi possível registrar a entrega do webhook.");
+
+  const { data: existing, error: lookupError } = await db
+    .from("payment_webhook_deliveries")
+    .select("id, processed_at")
+    .eq("provider", input.provider)
+    .eq("payload_hash", input.payloadHash)
+    .maybeSingle();
+  if (lookupError || !existing) throw new Error("Não foi possível verificar a entrega repetida do webhook.");
+  return {
+    id: String(existing.id),
+    duplicate: true,
+    processedAt: existing.processed_at as string | null | undefined,
+  };
+}
+
+export async function completePaymentWebhookDelivery(id: string) {
+  const db = getSupabase();
+  if (!db || !id) return;
+  const { error } = await db
+    .from("payment_webhook_deliveries")
+    .update({ processed_at: now(), error: null })
+    .eq("id", id);
+  if (error) throw new Error("Não foi possível finalizar o registro do webhook.");
+}
+
+export async function failPaymentWebhookDelivery(id: string, message: string) {
+  const db = getSupabase();
+  if (!db || !id) return;
+  await db
+    .from("payment_webhook_deliveries")
+    .update({ error: message.slice(0, 500) })
+    .eq("id", id);
 }
 
 export async function listOrders() {
@@ -875,6 +953,15 @@ export async function savePixPayment(
 export async function updatePaymentStatus(orderId: string, paymentStatus: PaymentStatus, providerPaymentId?: string) {
   const db = getSupabase();
   if (db) {
+    const { data: current, error: currentError } = await db
+      .from("orders")
+      .select("payment_status")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (currentError || !current) throw new Error("Pedido não encontrado para atualizar o pagamento.");
+    // Payment notifications can arrive out of order. Never downgrade a payment
+    // that was already confirmed by the gateway.
+    if (current.payment_status === "approved" && paymentStatus !== "approved") return;
     const { error } = await db
       .from("orders")
       .update({ payment_status: paymentStatus, updated_at: now() })
@@ -888,6 +975,7 @@ export async function updatePaymentStatus(orderId: string, paymentStatus: Paymen
   await ensureLocalCommerceLoaded();
   const order = memory.orders.find((candidate) => candidate.id === orderId);
   if (order) {
+    if (order.paymentStatus === "approved" && paymentStatus !== "approved") return;
     order.paymentStatus = paymentStatus;
     order.updatedAt = now();
     await persistLocalCommerce();

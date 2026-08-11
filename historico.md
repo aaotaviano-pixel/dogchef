@@ -109,3 +109,14 @@
   inicialização automática do agente no usuário atual, com reinício no Agendador de Tarefas.
 - Criada a migration `20260810030000_print_test_jobs.sql` para o botão de teste sem pedido
   falso; aplicação remota continua pendente de autenticação no Supabase.
+
+## 2026-08-11 — Auditoria de producao e endurecimento de pagamentos
+
+- Validada a home, menu publico, personalizacao e carrinho no alias publico da Vercel;
+  nenhum pedido real ou dado remoto foi criado ou alterado nesta rodada.
+- Atualizados `next` e `eslint-config-next` para 16.3.0; typecheck, lint, build, cinco
+  testes automatizados IPP e `npm audit` passaram, sem vulnerabilidades reportadas.
+- Webhook Mercado Pago passou a validar timestamp, moeda, valor, modalidade Pix,
+  deduplicacao de entrega e consulta direta do pedido.
+- Pagamento ja aprovado nao pode ser rebaixado por notificacao atrasada.
+- Relatorio completo registrado em `AUDITORIA_PRODUCAO_2026-08-11.md` e no Segundo Cerebro.

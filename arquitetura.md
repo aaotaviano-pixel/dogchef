@@ -80,3 +80,10 @@ incluindo `PRINT_SERVICE_CONNECTED`, `IPP_JOB_ACCEPTED`, `PRINT_JOB_SUCCESS`,
 
 `resetDashboardMetrics` registra um evento `dashboard_metrics_reset` no `audit_log`. O painel
 filtra apenas pedidos criados depois do ultimo marco, sem alterar ou excluir pedidos antigos.
+
+## Webhook Mercado Pago
+
+`src/app/api/v1/payments/webhook/route.ts` usa Node.js, valida assinatura com janela de
+cinco minutos, registra a entrega em `payment_webhook_deliveries`, consulta o pedido por
+`external_reference`, valida Pix/BRL/valor e marca o processamento. Reentregas sao
+idempotentes e status aprovado nao sofre downgrade por notificacao atrasada.

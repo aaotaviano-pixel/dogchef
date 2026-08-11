@@ -339,3 +339,9 @@ O código permanece funcional sem inventar estes dados, mas a ativação final d
 - modelo e endereço da impressora térmica;
 - arquivo oficial da logo em boa resolução;
 - condições comerciais do contrato e vencimento mensal no dia 10.
+# Auditoria e operacao
+
+O relatorio tecnico mais recente esta em
+[`AUDITORIA_PRODUCAO_2026-08-11.md`](./AUDITORIA_PRODUCAO_2026-08-11.md). Ele registra
+validacoes de producao, seguranca, pagamentos, dependencias, imagens e impressao sem
+expor segredos.
