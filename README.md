@@ -244,6 +244,8 @@ O storefront usa o tema claro por padrão, com a identidade visual do Dog do Che
 
 ## Agente local ESC/POS
 
+Para a operacao diaria, consulte tambem o [Manual de Impressao](MANUAL_IMPRESSAO_DOGCHEF.md).
+
 O agente em `agent/index.ts` é executado no computador da cozinha. Ele consulta a API protegida, reserva um trabalho de impressão e envia o ticket ESC/POS por rede TCP, compartilhamento ou spooler RAW do Windows. Ele não se conecta diretamente ao Supabase.
 
 1. Na máquina da impressora, copie `agent/.env.example` para `agent/.env`.
