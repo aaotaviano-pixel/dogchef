@@ -62,8 +62,23 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
 
 ## Previa visual local
 
-- O storefront usa o tema claro por padrao; `NEXT_PUBLIC_DOGCHEF_DARK_PREVIEW=true` ativa apenas uma previa escura temporaria.
-- A decisao e visual e reversivel por ambiente, sem alterar dados ou regras de negocio.
+- O storefront usa corpo claro em creme, hero e destaques escuros e comandos vermelhos.
+- `NEXT_PUBLIC_DOGCHEF_DARK_PREVIEW` e legado e nao controla mais a composicao publica.
+- A decisao e somente visual; nunca alterar dados ou regras de negocio para mudar o tema.
+
+## Vitrine aprovada em 2026-08-15
+
+- Usar `/api/v1/menu` como unica fonte de categorias, disponibilidade, horarios, taxa e
+  capacidades de pagamento/contato.
+- O hero usa produtos ativos do Showcase, ordenados por `showcaseOrder`, com fallback
+  somente para produtos ativos do catalogo.
+- Sem ranking confiavel, usar "Destaques da casa"; nao inventar "mais vendidos",
+  avaliacoes, quantidade de clientes, promocoes ou beneficios.
+- O carrossel avanca em 4,8 segundos, pausa por 7 segundos apos interacao e para quando a
+  aba nao esta visivel.
+- Controles precisam funcionar por teclado, e animacoes devem respeitar
+  `prefers-reduced-motion`.
+- Fotos cadastradas no painel continuam sendo renderizadas diretamente, sem edicao.
 
 ## Marca oficial
 

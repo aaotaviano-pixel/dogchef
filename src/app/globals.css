@@ -1361,3 +1361,673 @@ a { color: inherit; text-decoration: none; }
   .dogchef-store .showcase-slide,
   .dogchef-store .showcase-slide.is-active { opacity: 1; transform: none; filter: none; transition: none; }
 }
+
+/* 2026 client-reference redesign. Scoped to the public storefront only. */
+.storefront-reference-redesign {
+  --store-red: #B82025;
+  --store-red-bright: #D6402C;
+  --store-mustard: #F0A202;
+  --store-ink: #17120F;
+  --store-charcoal: #211A16;
+  --store-cream: #FFF6EC;
+  --store-paper: #FFFCF8;
+  --store-line: #E6D9CC;
+  min-height: 100vh;
+  padding: 0 20px;
+  overflow: hidden;
+  color: var(--store-ink);
+  background: #F7EFE6;
+}
+
+.storefront-reference-redesign .store-utility-bar {
+  width: calc(100% + 40px);
+  margin-left: -20px;
+  color: #F8EFE8;
+  background: #0F0D0C;
+}
+
+.storefront-reference-redesign .store-utility-inner {
+  width: min(100%, 1280px);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin: auto;
+  padding: 0 20px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.storefront-reference-redesign .store-utility-inner span,
+.storefront-reference-redesign .store-utility-inner a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.storefront-reference-redesign .store-utility-inner a:hover { color: var(--store-mustard); }
+
+.storefront-reference-redesign .store-header {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  width: min(100%, 1280px);
+  max-width: none;
+  height: 92px;
+  border: 0;
+  background: rgba(255, 252, 248, .94);
+  backdrop-filter: blur(14px);
+}
+
+.storefront-reference-redesign .brand-lockup { gap: 12px; }
+.storefront-reference-redesign .brand-mark {
+  width: 58px;
+  height: 58px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.storefront-reference-redesign .brand-lockup strong {
+  color: var(--store-ink);
+  font-family: Impact, "Arial Narrow", Arial, sans-serif;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.storefront-reference-redesign .brand-lockup small {
+  margin-top: 4px;
+  color: var(--store-red);
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.storefront-reference-redesign .store-main-nav {
+  display: flex;
+  align-items: center;
+  gap: 34px;
+}
+
+.storefront-reference-redesign .store-main-nav a {
+  position: relative;
+  padding: 10px 0;
+  color: #443A34;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.storefront-reference-redesign .store-main-nav a::after {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  left: 0;
+  height: 2px;
+  background: var(--store-red);
+  content: "";
+  opacity: 0;
+  transform: scaleX(.3);
+  transition: opacity .2s ease, transform .2s ease;
+}
+
+.storefront-reference-redesign .store-main-nav a:hover,
+.storefront-reference-redesign .store-main-nav a:focus-visible { color: var(--store-red); }
+.storefront-reference-redesign .store-main-nav a:hover::after,
+.storefront-reference-redesign .store-main-nav a:focus-visible::after { opacity: 1; transform: scaleX(1); }
+
+.storefront-reference-redesign .store-header-actions { gap: 10px; }
+.storefront-reference-redesign .account-button {
+  width: 44px;
+  height: 44px;
+  border-color: var(--store-line);
+  border-radius: 8px;
+  color: var(--store-ink);
+  background: var(--store-paper);
+}
+
+.storefront-reference-redesign .header-cart-button {
+  position: relative;
+  min-width: 134px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 14px;
+  border: 1px solid var(--store-red);
+  border-radius: 8px;
+  color: var(--store-ink);
+  background: var(--store-paper);
+  text-align: left;
+}
+
+.storefront-reference-redesign .header-cart-button > span { display: grid; gap: 1px; }
+.storefront-reference-redesign .header-cart-button small { color: #756A62; font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.storefront-reference-redesign .header-cart-button strong { font-size: 13px; }
+.storefront-reference-redesign .header-cart-button:hover { color: var(--store-red); background: #FFF2EC; }
+
+.storefront-reference-redesign .dogchef-hero {
+  width: min(100%, 1400px);
+  max-width: none;
+  min-height: 590px;
+  aspect-ratio: auto;
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  color: var(--store-cream);
+  background: #080706;
+  box-shadow: 0 24px 60px rgba(39, 23, 16, .2);
+}
+
+.storefront-reference-redesign .dogchef-hero::before,
+.storefront-reference-redesign .dogchef-hero::after { display: none; }
+
+.storefront-reference-redesign .showcase-slides {
+  z-index: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: 64%;
+  overflow: hidden;
+  background: #20140E;
+}
+
+.storefront-reference-redesign .showcase-slide {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  filter: saturate(1.08) contrast(1.03);
+  transform: scale(1.035);
+  transition: opacity 700ms ease, transform 5.2s ease;
+}
+
+.storefront-reference-redesign .showcase-slide.is-active { opacity: 1; transform: scale(1); }
+.storefront-reference-redesign .showcase-shade {
+  z-index: 1;
+  background: linear-gradient(90deg, #090807 0%, rgba(9,8,7,.98) 33%, rgba(9,8,7,.79) 52%, rgba(9,8,7,.25) 76%, rgba(9,8,7,.08) 100%);
+}
+
+.storefront-reference-redesign .hero-content {
+  position: relative;
+  z-index: 2;
+  width: 55%;
+  min-height: 590px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 62px 64px 76px;
+}
+
+.storefront-reference-redesign .hero-content .eyebrow {
+  margin-bottom: 18px;
+  color: #F4E9DF;
+  font-size: 10px;
+}
+
+.storefront-reference-redesign .showcase-kicker {
+  margin: 0 0 6px;
+  color: var(--store-mustard);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.storefront-reference-redesign .hero h1 {
+  max-width: 590px;
+  margin: 0;
+  color: var(--store-cream);
+  font-family: Impact, "Arial Narrow", Arial, sans-serif;
+  font-size: 72px;
+  font-weight: 700;
+  line-height: .94;
+  text-transform: uppercase;
+}
+
+.storefront-reference-redesign .hero h1 em { color: var(--store-red-bright); font-style: normal; font-weight: inherit; }
+.storefront-reference-redesign .hero-featured-copy {
+  max-width: 500px;
+  margin-top: 24px;
+  padding-left: 14px;
+  border-left: 3px solid var(--store-red-bright);
+}
+
+.storefront-reference-redesign .hero-featured-copy strong { display: block; color: #FFF; font-size: 15px; }
+.storefront-reference-redesign .hero-featured-copy p {
+  display: -webkit-box;
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: #D7CBC3;
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.storefront-reference-redesign .showcase-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 25px; }
+.storefront-reference-redesign .showcase-actions .button { min-width: 136px; min-height: 46px; border-radius: 6px; }
+.storefront-reference-redesign .button-primary { color: #FFF; background: var(--store-red); }
+.storefront-reference-redesign .button-primary:hover:not(:disabled) { background: #981A1E; }
+.storefront-reference-redesign .button-outline { border: 1px solid rgba(255,255,255,.42); color: #FFF; background: rgba(0,0,0,.24); }
+.storefront-reference-redesign .button-outline:hover { border-color: #FFF; background: rgba(255,255,255,.1); }
+.storefront-reference-redesign .showcase-actions > strong { margin-left: 4px; color: var(--store-mustard); font-size: 23px; }
+
+.storefront-reference-redesign .hero-meta { margin-top: 21px; color: #D7CBC3; }
+.storefront-reference-redesign .hero-meta span {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 10px;
+}
+
+.storefront-reference-redesign .showcase-controls {
+  position: absolute;
+  z-index: 3;
+  right: 28px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid rgba(255,255,255,.24);
+  border-radius: 7px;
+  background: rgba(10,8,7,.64);
+  backdrop-filter: blur(8px);
+}
+
+.storefront-reference-redesign .showcase-controls > button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: #FFF;
+  background: transparent;
+}
+
+.storefront-reference-redesign .showcase-controls > button:hover { background: var(--store-red); }
+.storefront-reference-redesign .showcase-controls > div { display: flex; align-items: center; gap: 6px; }
+.storefront-reference-redesign .showcase-dot { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 50%; background: #D8CDC5; }
+.storefront-reference-redesign .showcase-dot.is-active { width: 22px; border-radius: 6px; background: var(--store-red-bright); }
+
+.storefront-reference-redesign .store-benefits {
+  position: relative;
+  z-index: 2;
+  width: min(calc(100% - 48px), 1200px);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: -18px auto 0;
+  overflow: hidden;
+  border-radius: 8px;
+  color: #FFF;
+  background: var(--store-red);
+  box-shadow: 0 18px 36px rgba(98, 22, 19, .2);
+}
+
+.storefront-reference-redesign .store-benefits article {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-height: 92px;
+  padding: 18px 21px;
+}
+
+.storefront-reference-redesign .store-benefits article + article { border-left: 1px solid rgba(255,255,255,.23); }
+.storefront-reference-redesign .store-benefits article > span { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; }
+.storefront-reference-redesign .store-benefits strong,
+.storefront-reference-redesign .store-benefits small { display: block; }
+.storefront-reference-redesign .store-benefits strong { font-size: 11px; text-transform: uppercase; }
+.storefront-reference-redesign .store-benefits small { margin-top: 4px; color: #F4D8D4; font-size: 9px; line-height: 1.4; }
+
+.storefront-reference-redesign .category-showcase,
+.storefront-reference-redesign .dogchef-menu,
+.storefront-reference-redesign .about-store { width: min(100%, 1240px); margin-right: auto; margin-left: auto; }
+.storefront-reference-redesign .category-showcase { padding: 76px 0 54px; scroll-margin-top: 96px; }
+.storefront-reference-redesign .section-heading { margin-bottom: 24px; }
+.storefront-reference-redesign .section-heading .eyebrow { color: var(--store-red); }
+.storefront-reference-redesign .section-heading h2,
+.storefront-reference-redesign .about-store h2 {
+  color: var(--store-ink);
+  font-family: Impact, "Arial Narrow", Arial, sans-serif;
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.storefront-reference-redesign .section-heading > span { color: #74675D; font-size: 10px; font-weight: 700; }
+.storefront-reference-redesign .category-carousel { padding-bottom: 0; }
+.storefront-reference-redesign .category-carousel-viewport { padding: 5px 2px 14px; }
+.storefront-reference-redesign .category-track-set { gap: 16px; }
+.storefront-reference-redesign .category-track-set + .category-track-set { margin-left: 16px; }
+.storefront-reference-redesign .category-tile {
+  width: 172px;
+  min-height: 186px;
+  flex-basis: 172px;
+  gap: 8px;
+  padding: 10px 10px 13px;
+  border: 1px solid var(--store-line);
+  border-radius: 8px;
+  color: var(--store-ink);
+  background: var(--store-paper);
+  box-shadow: 0 10px 22px rgba(50, 30, 19, .08);
+}
+
+.storefront-reference-redesign .category-tile:hover { border-color: var(--store-red); transform: translateY(-5px); }
+.storefront-reference-redesign .category-tile.active { border-color: var(--store-red); color: var(--store-ink); background: #FFF0E8; box-shadow: inset 0 0 0 1px var(--store-red), 0 14px 28px rgba(113, 29, 23, .13); }
+.storefront-reference-redesign .category-tile-image,
+.storefront-reference-redesign .category-tile-icon {
+  width: 150px;
+  height: 116px;
+  border-radius: 5px;
+  background: #241A15;
+}
+
+.storefront-reference-redesign .category-tile-image img { object-fit: cover; }
+.storefront-reference-redesign .category-tile b { font-size: 12px; text-transform: uppercase; }
+.storefront-reference-redesign .category-tile small { color: #82756C; font-size: 9px; }
+
+.storefront-reference-redesign .featured-band {
+  width: calc(100% + 40px);
+  max-width: none;
+  margin: 0 0 0 -20px;
+  padding: 62px 20px 68px;
+  scroll-margin-top: 92px;
+  color: var(--store-cream);
+  background: #141210;
+}
+
+.storefront-reference-redesign .featured-section-inner { width: min(100%, 1240px); margin: auto; }
+.storefront-reference-redesign .featured-band .section-heading .eyebrow { color: var(--store-mustard); }
+.storefront-reference-redesign .featured-band .section-heading h2 { color: #FFF; }
+.storefront-reference-redesign .featured-band .section-heading > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #E8DCD3;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.storefront-reference-redesign .featured-band .section-heading > a:hover { color: var(--store-mustard); }
+.storefront-reference-redesign .featured-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: none;
+  gap: 14px;
+}
+
+.storefront-reference-redesign .featured-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #4D4540;
+  border-top: 3px solid var(--visual-accent, var(--store-red));
+  border-radius: 8px;
+  color: #FFF;
+  background: #1E1B19;
+  box-shadow: none;
+}
+
+.storefront-reference-redesign .featured-card:hover { border-color: var(--visual-accent, var(--store-red)); transform: translateY(-4px); }
+.storefront-reference-redesign .featured-card-media { width: 100%; height: auto; aspect-ratio: 4 / 3; background: #29231F; }
+.storefront-reference-redesign .featured-card-media img { object-fit: cover; }
+.storefront-reference-redesign .featured-card-media::after { inset: 8px; border-radius: 4px; }
+.storefront-reference-redesign .featured-card > div { flex: 1; display: flex; flex-direction: column; gap: 7px; padding: 14px; }
+.storefront-reference-redesign .featured-card > div > small { color: var(--store-mustard); font-size: 8px; }
+.storefront-reference-redesign .featured-card h3 { color: #FFF; font-size: 15px; }
+.storefront-reference-redesign .featured-card p {
+  display: -webkit-box;
+  min-height: 34px;
+  margin: 0;
+  overflow: hidden;
+  color: #C8BAB0;
+  font-size: 10px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.storefront-reference-redesign .featured-card footer { margin-top: auto; }
+.storefront-reference-redesign .featured-card footer strong { color: #FFF; font-size: 15px; }
+.storefront-reference-redesign .featured-card .round-add { display: grid; background: var(--store-red); }
+
+.storefront-reference-redesign .dogchef-menu { max-width: none; padding: 76px 0 34px; scroll-margin-top: 96px; }
+.storefront-reference-redesign .menu-all-filter {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--store-line);
+  border-radius: 6px;
+  color: var(--store-red);
+  background: var(--store-paper);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.storefront-reference-redesign .menu-all-filter:hover { border-color: var(--store-red); background: #FFF0E8; }
+.storefront-reference-redesign .dogchef-menu-section { margin-bottom: 58px; scroll-margin-top: 108px; }
+.storefront-reference-redesign .dogchef-menu-section__header { margin-bottom: 18px; border-bottom-color: var(--store-line); }
+.storefront-reference-redesign .dogchef-menu-section__header h3 {
+  color: var(--store-ink);
+  font-family: Impact, "Arial Narrow", Arial, sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.storefront-reference-redesign .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
+.storefront-reference-redesign .product-card {
+  min-height: 360px;
+  border-color: var(--store-line);
+  border-radius: 8px;
+  background: var(--store-paper);
+  box-shadow: 0 9px 22px rgba(56, 35, 22, .07);
+}
+
+.storefront-reference-redesign .product-card:hover { border-color: var(--visual-accent, var(--store-red)); box-shadow: 0 17px 32px rgba(56, 35, 22, .13); }
+.storefront-reference-redesign .product-image { aspect-ratio: 4 / 3; border-radius: 7px 7px 0 0; }
+.storefront-reference-redesign .product-image-frame { border-radius: 5px; }
+.storefront-reference-redesign .product-copy { min-height: 102px; }
+.storefront-reference-redesign .product-copy h3 { color: var(--store-ink); font-size: 16px; }
+.storefront-reference-redesign .product-copy p { color: #74675D; font-size: 10px; line-height: 1.5; -webkit-line-clamp: 3; }
+.storefront-reference-redesign .product-bottom strong { font-size: 17px; }
+.storefront-reference-redesign .round-add { border-radius: 6px; }
+
+.storefront-reference-redesign .about-store {
+  min-height: 410px;
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: stretch;
+  margin-bottom: 76px;
+  scroll-margin-top: 92px;
+  overflow: hidden;
+  border-top: 1px solid var(--store-line);
+  border-bottom: 1px solid var(--store-line);
+}
+
+.storefront-reference-redesign .about-store-copy { align-self: center; padding: 46px 56px 46px 12px; }
+.storefront-reference-redesign .about-store-copy .eyebrow { color: var(--store-red); }
+.storefront-reference-redesign .about-store h2 { max-width: 450px; margin: 0; font-size: 46px; }
+.storefront-reference-redesign .about-store-copy > p:not(.eyebrow) { max-width: 520px; margin: 20px 0 25px; color: #685B52; font-size: 12px; line-height: 1.7; }
+.storefront-reference-redesign .about-store-copy .button { width: fit-content; border-radius: 6px; }
+.storefront-reference-redesign .about-store-media { position: relative; min-height: 410px; overflow: hidden; }
+.storefront-reference-redesign .about-store-media img { object-fit: cover; }
+
+.storefront-reference-redesign .store-footer {
+  width: calc(100% + 40px);
+  max-width: none;
+  grid-template-columns: minmax(0, 1.4fr) minmax(170px, .7fr) minmax(190px, .7fr);
+  gap: 34px;
+  margin: 0 0 0 -20px;
+  padding: 48px max(20px, calc((100% - 1240px) / 2)) 22px;
+  border: 0;
+  color: #CDBFB6;
+  background: #11100F;
+}
+
+.storefront-reference-redesign .store-footer .brand-lockup strong { color: #FFF; }
+.storefront-reference-redesign .store-footer .brand-lockup small { color: var(--store-red-bright); }
+.storefront-reference-redesign .store-footer-brand,
+.storefront-reference-redesign .store-footer-service,
+.storefront-reference-redesign .store-footer-contact { display: grid; align-content: start; justify-items: start; gap: 9px; }
+.storefront-reference-redesign .store-footer-brand p { max-width: 360px; margin: 4px 0 0; color: #9E9087; font-size: 10px; line-height: 1.6; }
+.storefront-reference-redesign .store-footer-service > span,
+.storefront-reference-redesign .store-footer-contact > span { color: var(--store-mustard); font-size: 9px; font-weight: 900; text-transform: uppercase; }
+.storefront-reference-redesign .store-footer-service strong { color: #FFF; font-size: 11px; }
+.storefront-reference-redesign .store-footer-service small { color: #9E9087; font-size: 9px; }
+.storefront-reference-redesign .store-footer-contact a { display: inline-flex; align-items: center; gap: 7px; color: #FFF; font-size: 10px; font-weight: 800; }
+.storefront-reference-redesign .store-footer-contact a:hover { color: var(--store-mustard); }
+.storefront-reference-redesign .store-footer-contact .is-pending { color: #796E67; }
+.storefront-reference-redesign .store-footer-links { grid-column: 1 / -1; padding-top: 18px; border-top: 1px solid #332D29; }
+.storefront-reference-redesign .store-footer-links a { color: #8F837B; }
+.storefront-reference-redesign .store-footer-links a:hover { color: #FFF; }
+
+.storefront-reference-redesign .floating-cart { z-index: 22; border-radius: 8px; background: var(--store-red); }
+.storefront-reference-redesign .dogchef-social-stack { z-index: 23; }
+
+@media (max-width: 1099px) {
+  .storefront-reference-redesign .store-main-nav { gap: 20px; }
+  .storefront-reference-redesign .hero h1 { font-size: 58px; }
+  .storefront-reference-redesign .hero-content { width: 59%; padding-right: 38px; padding-left: 44px; }
+  .storefront-reference-redesign .store-benefits article { padding-right: 14px; padding-left: 14px; }
+  .storefront-reference-redesign .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .storefront-reference-redesign .about-store-copy { padding-left: 6px; }
+}
+
+@media (max-width: 839px) {
+  .storefront-reference-redesign .store-main-nav { display: none; }
+  .storefront-reference-redesign .dogchef-hero { min-height: 560px; }
+  .storefront-reference-redesign .hero-content { width: 66%; min-height: 560px; padding: 44px 30px 72px; }
+  .storefront-reference-redesign .hero h1 { font-size: 50px; }
+  .storefront-reference-redesign .store-benefits { grid-template-columns: repeat(2, 1fr); }
+  .storefront-reference-redesign .store-benefits article:nth-child(3) { border-left: 0; }
+  .storefront-reference-redesign .store-benefits article:nth-child(n+3) { border-top: 1px solid rgba(255,255,255,.23); }
+  .storefront-reference-redesign .featured-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .storefront-reference-redesign .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .storefront-reference-redesign .about-store { grid-template-columns: 1fr; }
+  .storefront-reference-redesign .about-store-copy { padding: 44px 10px; }
+  .storefront-reference-redesign .about-store-media { min-height: 340px; }
+  .storefront-reference-redesign .store-footer { grid-template-columns: 1.3fr 1fr; }
+  .storefront-reference-redesign .store-footer-contact { grid-column: 2; }
+}
+
+@media (max-width: 619px) {
+  .storefront-reference-redesign { padding-right: 12px; padding-left: 12px; }
+  .storefront-reference-redesign .dogchef-social-stack { flex-direction: row; }
+  .storefront-reference-redesign .store-utility-bar,
+  .storefront-reference-redesign .featured-band,
+  .storefront-reference-redesign .store-footer { width: calc(100% + 24px); margin-left: -12px; }
+  .storefront-reference-redesign .store-utility-inner { min-height: 30px; padding: 0 12px; font-size: 8px; }
+  .storefront-reference-redesign .store-utility-inner span:nth-child(2) { display: none; }
+  .storefront-reference-redesign .store-header { height: 72px; }
+  .storefront-reference-redesign .brand-lockup { gap: 8px; }
+  .storefront-reference-redesign .brand-mark { width: 46px; height: 46px; }
+  .storefront-reference-redesign .brand-lockup strong { font-size: 19px; }
+  .storefront-reference-redesign .brand-lockup small { font-size: 7px; }
+  .storefront-reference-redesign .store-header-actions { gap: 6px; }
+  .storefront-reference-redesign .account-button { width: 40px; height: 40px; }
+  .storefront-reference-redesign .header-cart-button { width: 44px; min-width: 44px; height: 40px; justify-content: center; padding: 0; }
+  .storefront-reference-redesign .header-cart-button > span { display: none; }
+  .storefront-reference-redesign .header-cart-button .cart-count { top: -5px; right: -4px; }
+
+  .storefront-reference-redesign .dogchef-hero { min-height: 620px; margin-bottom: 0; }
+  .storefront-reference-redesign .showcase-slides { top: 0; width: 100%; height: 52%; }
+  .storefront-reference-redesign .showcase-slide { object-position: center; }
+  .storefront-reference-redesign .showcase-shade { background: linear-gradient(0deg, #090807 0%, #090807 47%, rgba(9,8,7,.84) 61%, rgba(9,8,7,.08) 88%, rgba(9,8,7,0) 100%); }
+  .storefront-reference-redesign .hero-content { width: 100%; min-height: 620px; justify-content: flex-end; padding: 250px 18px 72px; }
+  .storefront-reference-redesign .hero-content .eyebrow { margin-bottom: 10px; font-size: 8px; }
+  .storefront-reference-redesign .showcase-kicker { font-size: 9px; }
+  .storefront-reference-redesign .hero h1 { max-width: 340px; font-size: 42px; }
+  .storefront-reference-redesign .hero-featured-copy { margin-top: 14px; }
+  .storefront-reference-redesign .hero-featured-copy strong { font-size: 13px; }
+  .storefront-reference-redesign .hero-featured-copy p { font-size: 10px; -webkit-line-clamp: 2; }
+  .storefront-reference-redesign .showcase-actions { margin-top: 16px; }
+  .storefront-reference-redesign .showcase-actions .button { min-width: 0; min-height: 40px; padding: 9px 11px; font-size: 9px; }
+  .storefront-reference-redesign .showcase-actions > strong { font-size: 18px; }
+  .storefront-reference-redesign .hero-meta { margin-top: 12px; }
+  .storefront-reference-redesign .hero-meta span { font-size: 8px; }
+  .storefront-reference-redesign .showcase-controls { top: auto; right: auto; bottom: 15px; left: 12px; }
+  .storefront-reference-redesign .showcase-controls > button { width: 29px; height: 29px; }
+
+  .storefront-reference-redesign .store-benefits { width: calc(100% - 20px); margin-top: -10px; }
+  .storefront-reference-redesign .store-benefits article { min-height: 74px; gap: 8px; padding: 12px 10px; }
+  .storefront-reference-redesign .store-benefits article > span { width: 28px; height: 28px; }
+  .storefront-reference-redesign .store-benefits article > span svg { width: 18px; }
+  .storefront-reference-redesign .store-benefits strong { font-size: 8px; }
+  .storefront-reference-redesign .store-benefits small { font-size: 7px; }
+
+  .storefront-reference-redesign .category-showcase { padding: 54px 0 38px; }
+  .storefront-reference-redesign .section-heading { align-items: flex-end; margin-bottom: 18px; }
+  .storefront-reference-redesign .section-heading h2,
+  .storefront-reference-redesign .about-store h2 { font-size: 30px; }
+  .storefront-reference-redesign .section-heading > span { max-width: 92px; font-size: 8px; text-align: right; white-space: normal; }
+  .storefront-reference-redesign .category-carousel-viewport { overflow-x: auto; mask-image: none; }
+  .storefront-reference-redesign .category-track { animation: none; }
+  .storefront-reference-redesign .category-track-set + .category-track-set { display: none; }
+  .storefront-reference-redesign .category-track-set { gap: 9px; }
+  .storefront-reference-redesign .category-tile { width: 116px; min-height: 137px; flex-basis: 116px; padding: 7px; }
+  .storefront-reference-redesign .category-tile-image,
+  .storefront-reference-redesign .category-tile-icon { width: 100px; height: 82px; }
+  .storefront-reference-redesign .category-tile b { font-size: 9px; }
+  .storefront-reference-redesign .category-tile small { font-size: 7px; }
+
+  .storefront-reference-redesign .featured-band { padding: 48px 12px 52px; }
+  .storefront-reference-redesign .featured-band .section-heading > a { display: none; }
+  .storefront-reference-redesign .featured-grid { gap: 9px; }
+  .storefront-reference-redesign .featured-card > div { min-height: 132px; padding: 10px; }
+  .storefront-reference-redesign .featured-card h3 { font-size: 12px; }
+  .storefront-reference-redesign .featured-card p { min-height: 30px; font-size: 8px; }
+  .storefront-reference-redesign .featured-card footer strong { font-size: 13px; }
+  .storefront-reference-redesign .featured-card .round-add { width: 30px; height: 30px; }
+
+  .storefront-reference-redesign .dogchef-menu { padding-top: 54px; }
+  .storefront-reference-redesign .menu-all-filter { max-width: 104px; min-height: 34px; padding: 0 8px; font-size: 8px; }
+  .storefront-reference-redesign .dogchef-menu-section { margin-bottom: 42px; }
+  .storefront-reference-redesign .dogchef-menu-section__header h3 { font-size: 25px; }
+  .storefront-reference-redesign .product-grid { gap: 9px; }
+  .storefront-reference-redesign .product-card { min-height: 292px; }
+  .storefront-reference-redesign .product-image { aspect-ratio: 1 / 1; padding: 7px; }
+  .storefront-reference-redesign .product-copy { min-height: 82px; padding: 10px 10px 0; }
+  .storefront-reference-redesign .product-copy h3 { font-size: 12px; }
+  .storefront-reference-redesign .product-copy p { font-size: 8px; line-height: 1.4; -webkit-line-clamp: 2; }
+  .storefront-reference-redesign .product-bottom { padding: 0 10px 10px; }
+  .storefront-reference-redesign .product-bottom strong { font-size: 13px; }
+
+  .storefront-reference-redesign .about-store { min-height: 0; margin-bottom: 50px; }
+  .storefront-reference-redesign .about-store-copy { padding: 38px 5px; }
+  .storefront-reference-redesign .about-store-copy > p:not(.eyebrow) { margin: 16px 0 20px; font-size: 10px; }
+  .storefront-reference-redesign .about-store-copy .button { min-height: 42px; font-size: 10px; }
+  .storefront-reference-redesign .about-store-media { min-height: 240px; }
+
+  .storefront-reference-redesign .store-footer { grid-template-columns: 1fr; gap: 24px; padding: 38px 18px 90px; }
+  .storefront-reference-redesign .store-footer-service,
+  .storefront-reference-redesign .store-footer-contact { grid-column: auto; }
+  .storefront-reference-redesign .store-footer-links { grid-column: auto; }
+}
+
+@media (max-width: 359px) {
+  .storefront-reference-redesign .brand-lockup strong { font-size: 17px; }
+  .storefront-reference-redesign .brand-lockup small { display: none; }
+  .storefront-reference-redesign .account-button { width: 37px; height: 37px; }
+  .storefront-reference-redesign .header-cart-button { width: 40px; min-width: 40px; height: 37px; }
+  .storefront-reference-redesign .hero h1 { font-size: 37px; }
+  .storefront-reference-redesign .showcase-actions .button-outline { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storefront-reference-redesign .showcase-slide,
+  .storefront-reference-redesign .showcase-slide.is-active,
+  .storefront-reference-redesign .category-track,
+  .storefront-reference-redesign .menu-reveal,
+  .storefront-reference-redesign .menu-reveal.is-visible { animation: none; transform: none; transition: none; }
+}

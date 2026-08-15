@@ -21,10 +21,22 @@ npm run dev
 Abra `http://localhost:3000`. Para validações locais:
 
 ```powershell
+npm test
 npm run lint
 npm run typecheck
 npm run build
 ```
+
+## Vitrine publica
+
+A home usa os dados reais de `/api/v1/menu`. O hero e a faixa **Destaques da casa** sao
+alimentados pelos produtos escolhidos no Showcase do painel; quando nao ha selecao, entram
+somente produtos disponiveis do catalogo. Categorias, precos, horarios, taxa, Pix e
+WhatsApp nunca sao simulados pela camada visual.
+
+As derivacoes de apresentacao ficam em `src/lib/storefront-presentation.ts`. A composicao
+e os estilos publicos ficam em `src/components/storefront.tsx` e no bloco escopado
+`.storefront-reference-redesign` de `src/app/globals.css`. O redesign nao exige migration.
 
 ## Variáveis de ambiente
 

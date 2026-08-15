@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  agentRules: false,
   reactStrictMode: true,
   allowedDevOrigins: ["127.0.0.1", "192.168.1.16"],
   images: {

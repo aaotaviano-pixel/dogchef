@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Clock3, CreditCard, LogOut, MapPin, Minus, Plus, ReceiptText, ShoppingBag, UserRound, X } from "lucide-react";
+import { ArrowLeft, BadgeCheck, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Clock3, CreditCard, Flame, LogOut, MapPin, Minus, Plus, ReceiptText, ShoppingBag, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { formatCurrency } from "@/lib/money";
 import { CustomerAccess } from "@/components/customer-access";
 import { InstagramLogo, WhatsAppLogo } from "@/components/social-icons";
+import { buildCategoryTiles, selectShowcaseProducts } from "@/lib/storefront-presentation";
 import type { CartLine, Catalog, CheckoutInput, CustomerAccount, Product } from "@/lib/types";
 
 const emptyCatalog: Catalog = {
@@ -69,6 +70,8 @@ export function Storefront() {
   const [activeCategory, setActiveCategory] = useState("all");
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [heroCarouselPaused, setHeroCarouselPaused] = useState(false);
+  const heroPauseTimer = useRef<number | null>(null);
   const [categoryCarouselPaused, setCategoryCarouselPaused] = useState(false);
   const categoryPauseTimer = useRef<number | null>(null);
   const [form, setForm] = useState({
@@ -76,29 +79,10 @@ export function Storefront() {
     street: "", number: "", neighborhood: "", complement: "", reference: "",
   });
   const [heroIndex, setHeroIndex] = useState(0);
-  const showcaseProducts = useMemo(() => {
-    const featured = catalog.products
-      .filter((product) => product.featured && product.isAvailable)
-      .sort((left, right) => left.showcaseOrder - right.showcaseOrder)
-      .slice(0, 5);
-    return featured.length ? featured : catalog.products.filter((product) => product.isAvailable).slice(0, 5);
-  }, [catalog.products]);
+  const showcaseProducts = useMemo(() => selectShowcaseProducts(catalog.products), [catalog.products]);
   const heroProduct = showcaseProducts.length ? showcaseProducts[heroIndex % showcaseProducts.length] : null;
-  const featuredProducts = showcaseProducts.slice(0, 3);
-  const categoryTiles = useMemo(() => [
-    {
-      id: "all",
-      name: "Todos",
-      count: catalog.products.length,
-      cover: catalog.products.find((product) => product.isAvailable)?.imageUrl,
-    },
-    ...catalog.categories.map((category) => ({
-      id: category.id,
-      name: category.name,
-      count: catalog.products.filter((product) => product.categoryId === category.id).length,
-      cover: catalog.products.find((product) => product.categoryId === category.id && product.isAvailable)?.imageUrl,
-    })),
-  ], [catalog.categories, catalog.products]);
+  const featuredProducts = showcaseProducts.slice(0, 4);
+  const categoryTiles = useMemo(() => buildCategoryTiles(catalog.categories, catalog.products), [catalog.categories, catalog.products]);
 
   useEffect(() => {
     const restoreReturnState = window.setTimeout(() => {
@@ -133,12 +117,30 @@ export function Storefront() {
   }, [cart]);
 
   useEffect(() => {
-    if (showcaseProducts.length < 2) return;
-    const timer = window.setInterval(() => setHeroIndex((current) => (current + 1) % showcaseProducts.length), 4_800);
-    return () => window.clearInterval(timer);
-  }, [showcaseProducts.length]);
+    if (showcaseProducts.length < 2 || heroCarouselPaused) return;
+    let timer: number | null = null;
+    const start = () => {
+      if (document.visibilityState !== "visible" || timer !== null) return;
+      timer = window.setInterval(() => setHeroIndex((current) => (current + 1) % showcaseProducts.length), 4_800);
+    };
+    const stop = () => {
+      if (timer !== null) window.clearInterval(timer);
+      timer = null;
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+    start();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [heroCarouselPaused, showcaseProducts.length]);
 
   useEffect(() => () => {
+    if (heroPauseTimer.current) window.clearTimeout(heroPauseTimer.current);
     if (categoryPauseTimer.current) window.clearTimeout(categoryPauseTimer.current);
   }, []);
 
@@ -180,6 +182,15 @@ export function Storefront() {
       const target = document.getElementById(categoryId === "all" ? "dogchef-menu-list" : `category-${categoryId}`);
       target?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 80);
+  }
+
+  function pauseHeroCarousel() {
+    setHeroCarouselPaused(true);
+    if (heroPauseTimer.current) window.clearTimeout(heroPauseTimer.current);
+    heroPauseTimer.current = window.setTimeout(() => {
+      setHeroCarouselPaused(false);
+      heroPauseTimer.current = null;
+    }, 7_000);
   }
 
   function pauseCategoryCarousel() {
@@ -287,50 +298,98 @@ export function Storefront() {
   }
 
   return (
-    <main className={process.env.NEXT_PUBLIC_DOGCHEF_DARK_PREVIEW === "true" ? "store-shell dogchef-store theme-dark-preview" : "store-shell dogchef-store"}>
-      <header className="store-header">
-        <div className="brand-lockup"><span className="brand-mark"><ChefHat size={23}/></span><span><strong>Dog do Chef</strong><small>prensado feito na hora</small></span></div>
-        <div className="store-header-actions"><a className="icon-button instagram-header-button" href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer" aria-label="Instagram da Dog do Chef" title="Instagram"><InstagramLogo size={19}/></a><button className="icon-button" aria-label={customer ? "Abrir minha conta" : "Entrar na minha conta"} onClick={() => setAccountOpen(true)}><UserRound size={19}/></button><button className="icon-button" aria-label="Abrir carrinho" onClick={() => setCartOpen(true)}><ShoppingBag size={20}/>{totalItems > 0 && <b className="cart-count">{totalItems}</b>}</button></div>
+    <main className="store-shell dogchef-store storefront-reference-redesign">
+      <div className="store-utility-bar">
+        <div className="store-utility-inner">
+          <span><Clock3 size={13}/>{catalog.hoursLabel}</span>
+          <span><MapPin size={13}/>Retirada ou entrega</span>
+          <a href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer"><InstagramLogo size={13}/>Siga no Instagram</a>
+        </div>
+      </div>
+
+      <header className="store-header" id="inicio">
+        <a className="brand-lockup" href="#inicio" aria-label="Dog do Chef, início"><span className="brand-mark"><ChefHat size={23}/></span><span><strong>Dog do Chef</strong><small>hot dog prensado</small></span></a>
+        <nav className="store-main-nav" aria-label="Navegação principal">
+          <a href="#inicio">Início</a>
+          <a href="#cardapio">Cardápio</a>
+          <a href="#destaques">Destaques</a>
+          <a href="#sobre">Sobre nós</a>
+        </nav>
+        <div className="store-header-actions">
+          <button className="icon-button account-button" aria-label={customer ? "Abrir minha conta" : "Entrar na minha conta"} onClick={() => setAccountOpen(true)}><UserRound size={19}/></button>
+          <button className="header-cart-button" aria-label={`Abrir carrinho, ${totalItems} itens, total ${formatCurrency(subtotal)}`} onClick={() => setCartOpen(true)}><ShoppingBag size={20}/><span><small>{totalItems} {totalItems === 1 ? "item" : "itens"}</small><strong>{formatCurrency(subtotal)}</strong></span>{totalItems > 0 && <b className="cart-count">{totalItems}</b>}</button>
+        </div>
       </header>
 
-      <section className="hero dogchef-hero menu-reveal menu-reveal--title" aria-roledescription="carrossel" aria-label="Destaques do cardápio">
+      <section
+        className="hero dogchef-hero menu-reveal menu-reveal--title"
+        aria-roledescription="carrossel"
+        aria-label="Destaques do cardápio"
+        onPointerDown={pauseHeroCarousel}
+        onMouseEnter={pauseHeroCarousel}
+        onFocusCapture={pauseHeroCarousel}
+        onKeyDown={(event) => {
+          if (showcaseProducts.length < 2) return;
+          if (event.key === "ArrowLeft") {
+            pauseHeroCarousel();
+            setHeroIndex((current) => (current - 1 + showcaseProducts.length) % showcaseProducts.length);
+          }
+          if (event.key === "ArrowRight") {
+            pauseHeroCarousel();
+            setHeroIndex((current) => (current + 1) % showcaseProducts.length);
+          }
+        }}
+      >
         <div className="showcase-slides" aria-live="off">
-          {showcaseProducts.length ? showcaseProducts.map((product, index) => <Image key={product.id} className={index === heroIndex % showcaseProducts.length ? "showcase-slide is-active" : "showcase-slide"} src={product.imageUrl} alt="" fill priority={index === 0} loading={index === 0 ? "eager" : "lazy"} sizes="(max-width: 840px) 100vw, 1120px" aria-hidden="true"/>) : <Image className="showcase-slide is-active" src="/images/dogchef/hero-dog-do-chef.webp" alt="" fill priority loading="eager" sizes="(max-width: 840px) 100vw, 1120px" aria-hidden="true"/>}
+          {showcaseProducts.length ? showcaseProducts.map((product, index) => <Image key={product.id} className={index === heroIndex % showcaseProducts.length ? "showcase-slide is-active" : "showcase-slide"} src={product.imageUrl} alt="" fill priority={index === 0} loading={index === 0 ? "eager" : "lazy"} sizes="(max-width: 760px) 100vw, 58vw" aria-hidden="true"/>) : <Image className="showcase-slide is-active" src="/images/dogchef/hero-dog-do-chef.webp" alt="" fill priority loading="eager" sizes="(max-width: 760px) 100vw, 58vw" aria-hidden="true"/>}
         </div>
         <span className="showcase-shade" aria-hidden="true"/>
         <div className="hero-content">
-          <p className="eyebrow"><span className="dot"/> {catalog.acceptingOrders ? "Pedidos abertos" : "Loja pausada"}</p>
-          <p className="showcase-kicker">Destaque da casa</p>
-          <h1>{heroProduct?.name ?? "Prensado de verdade"}</h1>
-          <p>{heroProduct?.description || "Hot dogs, gratinados, porções e bebidas preparados na hora para você."}</p>
-          <div className="showcase-actions"><button className="button button-primary" disabled={!heroProduct} onClick={() => heroProduct && openProduct(heroProduct)}>Pedir agora <Plus size={17}/></button>{heroProduct && <strong>{formatCurrency(heroProduct.priceCents)}</strong>}</div>
-          <div className="hero-meta"><span><Clock3 size={16}/>{catalog.hoursLabel}</span><span><MapPin size={16}/>Entrega padrão {formatCurrency(catalog.defaultDeliveryFeeCents)}</span></div>
+          <p className="eyebrow"><span className={catalog.acceptingOrders ? "dot" : "dot paused"}/> {catalog.acceptingOrders ? "Pedidos abertos" : "Loja pausada"}</p>
+          <p className="showcase-kicker">Dog do Chef</p>
+          <h1>Hot dog <em>prensado</em> feito na hora.</h1>
+          <div className="hero-featured-copy"><strong>{heroProduct?.name ?? "Cardápio Dog do Chef"}</strong><p>{heroProduct?.description || "Hot dogs, gratinados, porções e bebidas para pedir pelo celular."}</p></div>
+          <div className="showcase-actions"><button className="button button-primary" disabled={!heroProduct || !catalog.acceptingOrders} onClick={() => heroProduct && openProduct(heroProduct)}>Pedir agora <Plus size={17}/></button><a className="button button-outline" href="#cardapio">Ver cardápio <ChevronDown size={17}/></a>{heroProduct && <strong>{formatCurrency(heroProduct.priceCents)}</strong>}</div>
+          <div className="hero-meta"><span><Clock3 size={15}/>{catalog.hoursLabel}</span><span><MapPin size={15}/>Entrega padrão {formatCurrency(catalog.defaultDeliveryFeeCents)}</span></div>
         </div>
-        {showcaseProducts.length > 1 && <div className="showcase-controls"><button onClick={() => setHeroIndex((current) => (current - 1 + showcaseProducts.length) % showcaseProducts.length)} aria-label="Destaque anterior"><ChevronLeft size={19}/></button><div role="tablist" aria-label="Escolher destaque">{showcaseProducts.map((product, index) => <button key={product.id} className={index === heroIndex % showcaseProducts.length ? "showcase-dot is-active" : "showcase-dot"} onClick={() => setHeroIndex(index)} aria-label={`Ver ${product.name}`} aria-selected={index === heroIndex % showcaseProducts.length} role="tab"/>)}</div><button onClick={() => setHeroIndex((current) => (current + 1) % showcaseProducts.length)} aria-label="Próximo destaque"><ChevronRight size={19}/></button></div>}
+        {showcaseProducts.length > 1 && <div className="showcase-controls"><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current - 1 + showcaseProducts.length) % showcaseProducts.length); }} aria-label="Destaque anterior"><ChevronLeft size={19}/></button><div role="tablist" aria-label="Escolher destaque">{showcaseProducts.map((product, index) => <button key={product.id} className={index === heroIndex % showcaseProducts.length ? "showcase-dot is-active" : "showcase-dot"} onClick={() => { pauseHeroCarousel(); setHeroIndex(index); }} aria-label={`Ver ${product.name}`} aria-selected={index === heroIndex % showcaseProducts.length} role="tab"/>)}</div><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current + 1) % showcaseProducts.length); }} aria-label="Próximo destaque"><ChevronRight size={19}/></button></div>}
       </section>
 
-      {featuredProducts.length > 0 && <section className="featured-section menu-reveal menu-reveal--title" aria-labelledby="featured-title">
-        <header className="section-heading"><div><p className="eyebrow">Preferidos da casa</p><h2 id="featured-title">Destaques para pedir agora</h2></div></header>
-        <div className="featured-grid">{featuredProducts.map((product, index) => { const visual = productVisualTreatment(product); return <article key={product.id} className={`${index === 0 ? "featured-card featured-card-main" : "featured-card featured-card-compact"} featured-card--${product.categoryId} featured-card--visual-${visual.tone}`}>
-          <button className="featured-card-media" onClick={() => openProduct(product)} aria-label={`Ver ${product.name}`}><Image src={product.imageUrl} alt={product.name} fill sizes={index === 0 ? "(max-width: 719px) 58vw, 520px" : "(max-width: 719px) 38vw, 260px"}/><span className="featured-visual-badge" aria-hidden="true">{visual.label}</span></button>
-          <div><small>{product.highlight || "Destaque"}</small><h3>{product.name}</h3>{index === 0 && <p>{product.description}</p>}<footer><strong>{formatCurrency(product.priceCents)}</strong><button className="round-add" onClick={() => openProduct(product)} aria-label={`Adicionar ${product.name}`}><Plus size={17}/></button></footer></div>
-        </article>; })}</div>
-      </section>}
+      <section className="store-benefits menu-reveal" aria-label="Como funciona">
+        <article><span><Flame size={22}/></span><div><strong>Feito na hora</strong><small>Tempo de preparo informado</small></div></article>
+        <article><span><MapPin size={22}/></span><div><strong>Retirada ou entrega</strong><small>Taxa calculada no pedido</small></div></article>
+        <article><span><ReceiptText size={22}/></span><div><strong>Acompanhe o pedido</strong><small>Status na sua conta</small></div></article>
+        <article><span><BadgeCheck size={22}/></span><div><strong>Pagamento na entrega</strong><small>Dinheiro ou cartão</small></div></article>
+      </section>
 
-      <section className="menu-section dogchef-menu" id="dogchef-menu-list">
-        <div className="section-heading menu-reveal menu-reveal--title"><div><p className="eyebrow">Nosso cardápio</p><h2>Escolha seu favorito</h2></div><span>{catalog.products.filter((product) => product.isAvailable).length} opções</span></div>
+      <section className="category-showcase" id="cardapio" aria-labelledby="category-title">
+        <header className="section-heading centered-heading menu-reveal menu-reveal--title"><div><p className="eyebrow">Explore o cardápio</p><h2 id="category-title">Nossas categorias</h2></div><span>{catalog.products.filter((product) => product.isAvailable).length} opções disponíveis</span></header>
         <nav className={categoryCarouselPaused ? "category-scroller category-carousel is-paused" : "category-scroller category-carousel"} aria-label="Categorias" onPointerDown={pauseCategoryCarousel} onWheel={pauseCategoryCarousel} onFocusCapture={pauseCategoryCarousel}>
           <div className="category-carousel-viewport">
             <div className="category-track">
               {[0, 1].map((copy) => <div className="category-track-set" key={copy} aria-hidden={copy === 1}>
                 {categoryTiles.map((tile) => <button key={`${copy}-${tile.id}`} className={`category-tile category-tile--${tile.id} ${activeCategory === tile.id ? "active" : ""}`} onClick={() => selectCategory(tile.id)} aria-pressed={activeCategory === tile.id} tabIndex={copy === 1 ? -1 : undefined}>
-                  {tile.cover ? <span className="category-tile-image"><Image src={tile.cover} alt="" fill sizes="96px"/></span> : <span className="category-tile-icon"><ChefHat size={24}/></span>}
+                  {tile.cover ? <span className="category-tile-image"><Image src={tile.cover} alt="" fill sizes="160px"/></span> : <span className="category-tile-icon"><ChefHat size={28}/></span>}
                   <b>{tile.name}</b><small>{tile.count} itens</small>
                 </button>)}
               </div>)}
             </div>
           </div>
         </nav>
+      </section>
+
+      {featuredProducts.length > 0 && <section className="featured-section featured-band menu-reveal menu-reveal--title" id="destaques" aria-labelledby="featured-title">
+        <div className="featured-section-inner">
+          <header className="section-heading"><div><p className="eyebrow">Selecionados no Showcase</p><h2 id="featured-title">Destaques da casa</h2></div><a href="#dogchef-menu-list">Ver cardápio completo <ChevronRight size={16}/></a></header>
+          <div className="featured-grid">{featuredProducts.map((product) => { const visual = productVisualTreatment(product); return <article key={product.id} className={`featured-card featured-card--${product.categoryId} featured-card--visual-${visual.tone}`}>
+            <button className="featured-card-media" onClick={() => openProduct(product)} aria-label={`Ver ${product.name}`}><Image src={product.imageUrl} alt={product.name} fill sizes="(max-width: 619px) 50vw, (max-width: 1023px) 33vw, 260px"/><span className="featured-visual-badge" aria-hidden="true">{visual.label}</span></button>
+            <div><small>{product.highlight || "Destaque"}</small><h3>{product.name}</h3><p>{product.description}</p><footer><strong>{formatCurrency(product.priceCents)}</strong><button className="round-add" onClick={() => openProduct(product)} aria-label={`Adicionar ${product.name}`}><Plus size={17}/></button></footer></div>
+          </article>; })}</div>
+        </div>
+      </section>}
+
+      <section className="menu-section dogchef-menu" id="dogchef-menu-list">
+        <div className="section-heading menu-reveal menu-reveal--title"><div><p className="eyebrow">Cardápio completo</p><h2>Escolha seu favorito</h2></div><button className="menu-all-filter" onClick={() => selectCategory("all")}>Ver todas as categorias</button></div>
         {visibleCategories.map((category) => {
           const categoryProducts = catalog.products.filter((product) => product.categoryId === category.id);
           return <section key={category.id} className="dogchef-menu-section" aria-labelledby={`category-${category.id}`}>
@@ -347,7 +406,17 @@ export function Storefront() {
         })}
       </section>
 
-      <footer className="store-footer"><div className="store-footer-brand"><div className="brand-lockup"><span className="brand-mark"><ChefHat size={20}/></span><span><strong>Dog do Chef</strong><small>prensado feito na hora</small></span></div><p>Feito na chapa, servido com cuidado e aquele sabor que dá vontade de voltar.</p></div><div className="store-footer-contact"><span>Fale com a gente</span><a href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer"><InstagramLogo size={17}/>@dogdochef_prensado</a><a className={catalog.whatsappConfigured ? "store-footer-whatsapp" : "store-footer-whatsapp is-pending"} href={catalog.whatsappUrl || WHATSAPP_PENDING_URL} target="_blank" rel="noreferrer" aria-label="Falar com a loja pelo WhatsApp" onClick={(event) => { if (!catalog.whatsappConfigured) event.preventDefault(); }}><WhatsAppLogo size={17}/>{catalog.whatsappConfigured ? "WhatsApp da loja" : "WhatsApp em configuração"}</a></div><nav className="store-footer-links" aria-label="Informações da loja"><Link href="/politica-de-privacidade">Privacidade</Link><Link href="/termos-de-uso">Termos de uso</Link></nav></footer>
+      <section className="about-store menu-reveal" id="sobre" aria-labelledby="about-title">
+        <div className="about-store-copy"><p className="eyebrow">Sobre nós</p><h2 id="about-title">O sabor do prensado, do seu jeito.</h2><p>O cardápio da Dog do Chef reúne hot dogs tradicionais, prensados, gratinados, combos, porções e bebidas. Escolha os adicionais, defina retirada ou entrega e acompanhe tudo pela sua conta.</p><a className="button button-primary" href="#cardapio">Escolher meu pedido <ChevronRight size={17}/></a></div>
+        <div className="about-store-media"><Image src="/images/dogchef/hero-dog-do-chef.webp" alt="Hot dog prensado da Dog do Chef com acompanhamento" fill sizes="(max-width: 760px) 100vw, 54vw"/></div>
+      </section>
+
+      <footer className="store-footer">
+        <div className="store-footer-brand"><div className="brand-lockup"><span className="brand-mark"><ChefHat size={20}/></span><span><strong>Dog do Chef</strong><small>hot dog prensado</small></span></div><p>Cardápio online com adicionais, retirada, entrega e acompanhamento do pedido.</p></div>
+        <div className="store-footer-service"><span>Atendimento</span><strong>{catalog.hoursLabel}</strong><small>Entrega padrão {formatCurrency(catalog.defaultDeliveryFeeCents)}</small></div>
+        <div className="store-footer-contact"><span>Canais da loja</span><a href="https://www.instagram.com/dogdochef_prensado/" target="_blank" rel="noreferrer"><InstagramLogo size={17}/>@dogdochef_prensado</a><a className={catalog.whatsappConfigured ? "store-footer-whatsapp" : "store-footer-whatsapp is-pending"} href={catalog.whatsappUrl || WHATSAPP_PENDING_URL} target="_blank" rel="noreferrer" aria-label="Falar com a loja pelo WhatsApp" onClick={(event) => { if (!catalog.whatsappConfigured) event.preventDefault(); }}><WhatsAppLogo size={17}/>{catalog.whatsappConfigured ? "WhatsApp da loja" : "WhatsApp em configuração"}</a></div>
+        <nav className="store-footer-links" aria-label="Informações da loja"><Link href="/politica-de-privacidade">Privacidade</Link><Link href="/termos-de-uso">Termos de uso</Link></nav>
+      </footer>
 
       {totalItems > 0 && <button className="floating-cart" onClick={() => setCartOpen(true)}><span><ShoppingBag size={19}/>{totalItems} {totalItems === 1 ? "item" : "itens"}</span><strong>{formatCurrency(subtotal)}</strong></button>}
       <div className={totalItems > 0 ? "dogchef-social-stack with-cart" : "dogchef-social-stack"} aria-label="Canais da loja">

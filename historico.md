@@ -121,3 +121,20 @@
 - Pagamento ja aprovado nao pode ser rebaixado por notificacao atrasada.
 - Relatorio completo registrado em `AUDITORIA_PRODUCAO_2026-08-11.md` e no Segundo Cerebro.
 - Commit `fac27aa` enviado ao GitHub e deployment da Vercel marcado como `success`.
+
+## 2026-08-15 — Redesign da vitrine conforme referencias da cliente
+
+- Reorganizada somente a vitrine publica; painel, APIs, banco, pedidos, pagamentos e
+  impressao permaneceram sem mudanca funcional.
+- Adicionados barra utilitaria, navegacao, hero cinematografico, beneficios reais,
+  categorias visuais, faixa escura de destaques, bloco institucional e novo rodape.
+- Showcase administrativo continua sendo a fonte do carrossel e dos destaques; nenhuma
+  categoria, promocao, avaliacao ou contagem de clientes foi inventada.
+- Criado `src/lib/storefront-presentation.ts` com testes para selecao ordenada dos
+  destaques e composicao das categorias apenas com produtos disponiveis.
+- Autoplay pausa por interacao e visibilidade da aba; controles manuais e reduced motion
+  foram preservados.
+- Carrinho, quantidade, subtotal e filtro de categoria foram testados no navegador local.
+- Viewports 320, 360, 375, 390, 414, 768, 1024, 1280, 1366, 1440 e 1920 px passaram sem
+  overflow horizontal.
+- O plano e a especificacao ficam em `docs/superpowers/`.

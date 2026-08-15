@@ -1,0 +1,41 @@
+import type { Category, Product } from "./types";
+
+export type StorefrontCategoryTile = {
+  id: string;
+  name: string;
+  count: number;
+  cover?: string;
+};
+
+export function selectShowcaseProducts(products: Product[], limit = 5) {
+  const featured = products
+    .filter((product) => product.featured && product.isAvailable)
+    .sort((left, right) => left.showcaseOrder - right.showcaseOrder)
+    .slice(0, limit);
+
+  return featured.length
+    ? featured
+    : products.filter((product) => product.isAvailable).slice(0, limit);
+}
+
+export function buildCategoryTiles(categories: Category[], products: Product[]): StorefrontCategoryTile[] {
+  const availableProducts = products.filter((product) => product.isAvailable);
+
+  return [
+    {
+      id: "all",
+      name: "Todos",
+      count: availableProducts.length,
+      cover: availableProducts[0]?.imageUrl,
+    },
+    ...categories.map((category) => {
+      const categoryProducts = availableProducts.filter((product) => product.categoryId === category.id);
+      return {
+        id: category.id,
+        name: category.name,
+        count: categoryProducts.length,
+        cover: categoryProducts[0]?.imageUrl,
+      };
+    }),
+  ];
+}

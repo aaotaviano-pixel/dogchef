@@ -1,6 +1,11 @@
 # Documentacao do Projeto DogChef
 
-Ultima verificacao local: 31/07/2026.
+Ultima verificacao local: 15/08/2026.
+
+> Atualizacao: o projeto esta versionado em Git no repositorio
+> `aaotaviano-pixel/dogchef`, vinculado ao projeto Vercel `dogchef` e usa Next.js 16.3.0.
+> As observacoes historicas abaixo sobre ausencia de `.git`, vinculo Vercel e versao
+> 16.2.12 descrevem apenas o primeiro levantamento e nao representam mais o estado atual.
 
 Este documento resume onde esta o projeto DogChef, como ele esta estruturado, quais tecnologias usa, quais comandos executar e o que ainda precisa ser configurado para funcionar como produto em producao.
 

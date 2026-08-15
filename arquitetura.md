@@ -87,3 +87,20 @@ filtra apenas pedidos criados depois do ultimo marco, sem alterar ou excluir ped
 cinco minutos, registra a entrega em `payment_webhook_deliveries`, consulta o pedido por
 `external_reference`, valida Pix/BRL/valor e marca o processamento. Reentregas sao
 idempotentes e status aprovado nao sofre downgrade por notificacao atrasada.
+
+## Vitrine de referencia da cliente (2026-08-15)
+
+`src/components/storefront.tsx` mantem os mesmos estados e handlers de catalogo, conta,
+carrinho e checkout, mas a composicao publica passou a seguir a direcao aprovada pela
+cliente: barra utilitaria, cabecalho com navegacao, hero escuro, beneficios, categorias,
+faixa editorial de destaques, cardapio completo, bloco institucional e rodape.
+
+O hero e alimentado exclusivamente pelos produtos selecionados no Showcase. A selecao e a
+montagem das categorias foram extraidas para `src/lib/storefront-presentation.ts`, sem
+consulta adicional nem mudanca de contrato da API. O titulo "Destaques da casa" evita
+afirmar ranking de vendas inexistente.
+
+A pagina usa corpo creme e faixas escuras apenas no hero, destaques e rodape. O antigo
+preview escuro nao e mais aplicado pelo componente publico. Autoplay pausa durante
+interacao e quando a aba fica invisivel; `prefers-reduced-motion` remove movimentos.
+Nenhuma migration ou escrita de banco integra o redesign.
