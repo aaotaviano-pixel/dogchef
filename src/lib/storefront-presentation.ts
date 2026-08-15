@@ -7,6 +7,12 @@ export type StorefrontCategoryTile = {
   cover?: string;
 };
 
+export type StorefrontCategoryMarqueeItem = StorefrontCategoryTile & {
+  copy: number;
+  key: string;
+  isDuplicate: boolean;
+};
+
 export function selectShowcaseProducts(products: Product[], limit = 5) {
   const featured = products
     .filter((product) => product.featured && product.isAvailable)
@@ -38,4 +44,18 @@ export function buildCategoryTiles(categories: Category[], products: Product[]):
       };
     }),
   ];
+}
+
+export function buildCategoryMarqueeItems(
+  tiles: StorefrontCategoryTile[],
+  copies = 2,
+): StorefrontCategoryMarqueeItem[] {
+  return Array.from({ length: Math.max(1, copies) }, (_, copy) =>
+    tiles.map((tile) => ({
+      ...tile,
+      copy,
+      key: `${copy}-${tile.id}`,
+      isDuplicate: copy > 0,
+    })),
+  ).flat();
 }

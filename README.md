@@ -357,3 +357,11 @@ O relatorio tecnico mais recente esta em
 [`AUDITORIA_PRODUCAO_2026-08-11.md`](./AUDITORIA_PRODUCAO_2026-08-11.md). Ele registra
 validacoes de producao, seguranca, pagamentos, dependencias, imagens e impressao sem
 expor segredos.
+
+## Refinamento mobile de 2026-08-15
+
+A vitrine possui hero mobile retangular 4:3, titulo animado por etapas e categorias reais
+em faixa automatica. `Destaques da casa` permanece branco; a partir de `Escolha seu
+favorito`, todo o cardapio usa cards escuros sobre um degrade que termina em preto. A
+faixa antiga de beneficios foi removida. A especificacao e o plano ficam em
+`docs/superpowers/`; esta rodada foi validada antes da publicacao em producao.

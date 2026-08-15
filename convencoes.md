@@ -94,6 +94,22 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
 - A diferenciacao vive somente em classes e tokens CSS no storefront: fundo, moldura, detalhe e etiqueta curta.
 - `product.imageUrl` e `product.images` continuam sendo usados sem edicao, reprocessamento ou substituicao, inclusive quando a foto foi enviada pela administradora.
 
+## Movimento e fluxo tonal da vitrine
+
+- Em ate 619 px, o hero publico usa retangulo 4:3; nao voltar ao empilhamento vertical de
+  imagem e texto com 620 px de altura.
+- A manchete anima em tres etapas quando o produto do Showcase muda e fica estatica sob
+  `prefers-reduced-motion`.
+- Categorias reais rodam automaticamente na faixa vermelha. A segunda copia e apenas
+  visual, usa `aria-hidden` e nao recebe foco.
+- Interacao pausa a faixa temporariamente e retoma em 4,8 segundos; foco de toque nao pode
+  prender a animacao. Botoes originais continuam filtrando o menu.
+- Sob `prefers-reduced-motion`, manter a manchete estatica e reduzir a velocidade da faixa
+  de categorias, sem desativar o movimento automatico solicitado.
+- `Destaques da casa` usa superficie clara. O wrapper `.storefront-dark-flow` comeca em
+  `Escolha seu favorito`; desde a primeira categoria, cards e textos usam tema escuro.
+- No mobile, Instagram e WhatsApp ficam no final da pagina, sem flutuar sobre produtos.
+
 ## Protecao de API
 
 - Rate limiting distribuido fica centralizado em `middleware.ts`.

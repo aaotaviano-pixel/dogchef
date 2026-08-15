@@ -138,3 +138,23 @@
 - Viewports 320, 360, 375, 390, 414, 768, 1024, 1280, 1366, 1440 e 1920 px passaram sem
   overflow horizontal.
 - O plano e a especificacao ficam em `docs/superpowers/`.
+
+## 2026-08-15 — Refinamento mobile e transicao claro-escuro
+
+- O hero mobile passou de 620 px de altura para um retangulo 4:3 entre 232 e 293 px nas
+  larguras testadas, preservando foto, CTA, preco e controles do Showcase.
+- A manchete foi dividida em tres etapas animadas e remonta a cada troca automatica do
+  produto; movimento reduzido continua respeitado.
+- Removida a faixa vermelha com quatro frases operacionais. Em seu lugar, categorias
+  reais e contagens do catalogo rodam em loop automatico e permanecem clicaveis.
+- Criado `buildCategoryMarqueeItems`, com teste de ordem, chaves e metadados acessiveis.
+- `Destaques da casa` ficou claro. A partir de `Escolha seu favorito`, o cardapio completo
+  usa fundo de grelha em degrade ate preto, cards escuros e texto claro desde a primeira
+  categoria.
+- Corrigido o bloqueio causado por `prefers-reduced-motion` e pelo foco persistente apos
+  toque: a faixa continua em velocidade reduzida, pausa por interacao e retoma em 4,8 s.
+- Botoes sociais deixaram de sobrepor conteudo no mobile e passaram para o final da pagina.
+- Nove testes, typecheck, lint e build de 38 paginas foram aprovados. Viewports 320, 360,
+  375, 390, 414, 768, 1024, 1440 e 1920 px ficaram sem overflow.
+- Filtro de categoria, modal de produto, carrinho, autoplay e pausa manual foram testados.
+- Alteracao validada e publicada na Vercel sem migration ou alteracao de dados remotos.

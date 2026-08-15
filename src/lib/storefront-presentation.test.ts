@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildCategoryTiles, selectShowcaseProducts } from "./storefront-presentation";
+import { buildCategoryMarqueeItems, buildCategoryTiles, selectShowcaseProducts } from "./storefront-presentation";
 import type { Category, Product } from "./types";
 
 function product(overrides: Partial<Product> & Pick<Product, "id" | "categoryId" | "name">): Product {
@@ -56,5 +56,19 @@ test("buildCategoryTiles uses only real categories and available product covers"
     { id: "all", name: "Todos", count: 2, cover: "/images/dog.webp" },
     { id: "dogs", name: "Hot dogs", count: 1, cover: "/images/dog.webp" },
     { id: "drinks", name: "Bebidas", count: 1, cover: "/images/drink.webp" },
+  ]);
+});
+
+test("buildCategoryMarqueeItems repeats category order with accessible duplicate metadata", () => {
+  const tiles = [
+    { id: "all", name: "Todos", count: 8, cover: "/images/all.webp" },
+    { id: "dogs", name: "Hot dogs", count: 5, cover: "/images/dogs.webp" },
+  ];
+
+  assert.deepEqual(buildCategoryMarqueeItems(tiles, 2), [
+    { ...tiles[0], copy: 0, key: "0-all", isDuplicate: false },
+    { ...tiles[1], copy: 0, key: "0-dogs", isDuplicate: false },
+    { ...tiles[0], copy: 1, key: "1-all", isDuplicate: true },
+    { ...tiles[1], copy: 1, key: "1-dogs", isDuplicate: true },
   ]);
 });

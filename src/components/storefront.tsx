@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, BadgeCheck, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Clock3, CreditCard, Flame, LogOut, MapPin, Minus, Plus, ReceiptText, ShoppingBag, UserRound, X } from "lucide-react";
+import { ArrowLeft, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Clock3, CreditCard, LogOut, MapPin, Minus, Plus, ReceiptText, ShoppingBag, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { formatCurrency } from "@/lib/money";
 import { CustomerAccess } from "@/components/customer-access";
 import { InstagramLogo, WhatsAppLogo } from "@/components/social-icons";
-import { buildCategoryTiles, selectShowcaseProducts } from "@/lib/storefront-presentation";
+import { buildCategoryMarqueeItems, buildCategoryTiles, selectShowcaseProducts } from "@/lib/storefront-presentation";
 import type { CartLine, Catalog, CheckoutInput, CustomerAccount, Product } from "@/lib/types";
 
 const emptyCatalog: Catalog = {
@@ -83,6 +83,7 @@ export function Storefront() {
   const heroProduct = showcaseProducts.length ? showcaseProducts[heroIndex % showcaseProducts.length] : null;
   const featuredProducts = showcaseProducts.slice(0, 4);
   const categoryTiles = useMemo(() => buildCategoryTiles(catalog.categories, catalog.products), [catalog.categories, catalog.products]);
+  const categoryMarqueeItems = useMemo(() => buildCategoryMarqueeItems(categoryTiles), [categoryTiles]);
 
   useEffect(() => {
     const restoreReturnState = window.setTimeout(() => {
@@ -346,8 +347,10 @@ export function Storefront() {
         <span className="showcase-shade" aria-hidden="true"/>
         <div className="hero-content">
           <p className="eyebrow"><span className={catalog.acceptingOrders ? "dot" : "dot paused"}/> {catalog.acceptingOrders ? "Pedidos abertos" : "Loja pausada"}</p>
-          <p className="showcase-kicker">Dog do Chef</p>
-          <h1>Hot dog <em>prensado</em> feito na hora.</h1>
+          <div className="hero-title-motion" key={heroProduct?.id ?? "dogchef-showcase"}>
+            <p className="showcase-kicker">Dog do Chef</p>
+            <h1><span>Hot dog</span> <em>prensado</em> <span>feito na hora.</span></h1>
+          </div>
           <div className="hero-featured-copy"><strong>{heroProduct?.name ?? "Cardápio Dog do Chef"}</strong><p>{heroProduct?.description || "Hot dogs, gratinados, porções e bebidas para pedir pelo celular."}</p></div>
           <div className="showcase-actions"><button className="button button-primary" disabled={!heroProduct || !catalog.acceptingOrders} onClick={() => heroProduct && openProduct(heroProduct)}>Pedir agora <Plus size={17}/></button><a className="button button-outline" href="#cardapio">Ver cardápio <ChevronDown size={17}/></a>{heroProduct && <strong>{formatCurrency(heroProduct.priceCents)}</strong>}</div>
           <div className="hero-meta"><span><Clock3 size={15}/>{catalog.hoursLabel}</span><span><MapPin size={15}/>Entrega padrão {formatCurrency(catalog.defaultDeliveryFeeCents)}</span></div>
@@ -355,29 +358,21 @@ export function Storefront() {
         {showcaseProducts.length > 1 && <div className="showcase-controls"><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current - 1 + showcaseProducts.length) % showcaseProducts.length); }} aria-label="Destaque anterior"><ChevronLeft size={19}/></button><div role="tablist" aria-label="Escolher destaque">{showcaseProducts.map((product, index) => <button key={product.id} className={index === heroIndex % showcaseProducts.length ? "showcase-dot is-active" : "showcase-dot"} onClick={() => { pauseHeroCarousel(); setHeroIndex(index); }} aria-label={`Ver ${product.name}`} aria-selected={index === heroIndex % showcaseProducts.length} role="tab"/>)}</div><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current + 1) % showcaseProducts.length); }} aria-label="Próximo destaque"><ChevronRight size={19}/></button></div>}
       </section>
 
-      <section className="store-benefits menu-reveal" aria-label="Como funciona">
-        <article><span><Flame size={22}/></span><div><strong>Feito na hora</strong><small>Tempo de preparo informado</small></div></article>
-        <article><span><MapPin size={22}/></span><div><strong>Retirada ou entrega</strong><small>Taxa calculada no pedido</small></div></article>
-        <article><span><ReceiptText size={22}/></span><div><strong>Acompanhe o pedido</strong><small>Status na sua conta</small></div></article>
-        <article><span><BadgeCheck size={22}/></span><div><strong>Pagamento na entrega</strong><small>Dinheiro ou cartão</small></div></article>
-      </section>
-
-      <section className="category-showcase" id="cardapio" aria-labelledby="category-title">
-        <header className="section-heading centered-heading menu-reveal menu-reveal--title"><div><p className="eyebrow">Explore o cardápio</p><h2 id="category-title">Nossas categorias</h2></div><span>{catalog.products.filter((product) => product.isAvailable).length} opções disponíveis</span></header>
-        <nav className={categoryCarouselPaused ? "category-scroller category-carousel is-paused" : "category-scroller category-carousel"} aria-label="Categorias" onPointerDown={pauseCategoryCarousel} onWheel={pauseCategoryCarousel} onFocusCapture={pauseCategoryCarousel}>
+      <section className="category-marquee menu-reveal" id="cardapio" aria-labelledby="category-title">
+        <div className="category-marquee-heading"><span aria-hidden="true">Explore</span><strong id="category-title">Escolha sua categoria</strong></div>
+        <nav className={categoryCarouselPaused ? "category-carousel is-paused" : "category-carousel"} aria-label="Categorias" onPointerDown={pauseCategoryCarousel} onWheel={pauseCategoryCarousel} onMouseEnter={pauseCategoryCarousel} onFocusCapture={pauseCategoryCarousel}>
           <div className="category-carousel-viewport">
             <div className="category-track">
-              {[0, 1].map((copy) => <div className="category-track-set" key={copy} aria-hidden={copy === 1}>
-                {categoryTiles.map((tile) => <button key={`${copy}-${tile.id}`} className={`category-tile category-tile--${tile.id} ${activeCategory === tile.id ? "active" : ""}`} onClick={() => selectCategory(tile.id)} aria-pressed={activeCategory === tile.id} tabIndex={copy === 1 ? -1 : undefined}>
-                  {tile.cover ? <span className="category-tile-image"><Image src={tile.cover} alt="" fill sizes="160px"/></span> : <span className="category-tile-icon"><ChefHat size={28}/></span>}
-                  <b>{tile.name}</b><small>{tile.count} itens</small>
-                </button>)}
-              </div>)}
+              {categoryMarqueeItems.map((tile) => <button key={tile.key} className={`category-tile category-tile--${tile.id} ${activeCategory === tile.id ? "active" : ""}`} onClick={() => selectCategory(tile.id)} aria-pressed={activeCategory === tile.id} aria-hidden={tile.isDuplicate || undefined} tabIndex={tile.isDuplicate ? -1 : undefined}>
+                {tile.cover ? <span className="category-tile-image"><Image src={tile.cover} alt="" fill sizes="120px"/></span> : <span className="category-tile-icon"><ChefHat size={25}/></span>}
+                <span className="category-tile-copy"><b>{tile.name}</b><small>{tile.count} itens</small></span>
+              </button>)}
             </div>
           </div>
         </nav>
       </section>
 
+      <div className="storefront-tone-flow">
       {featuredProducts.length > 0 && <section className="featured-section featured-band menu-reveal menu-reveal--title" id="destaques" aria-labelledby="featured-title">
         <div className="featured-section-inner">
           <header className="section-heading"><div><p className="eyebrow">Selecionados no Showcase</p><h2 id="featured-title">Destaques da casa</h2></div><a href="#dogchef-menu-list">Ver cardápio completo <ChevronRight size={16}/></a></header>
@@ -388,6 +383,7 @@ export function Storefront() {
         </div>
       </section>}
 
+      <div className="storefront-dark-flow">
       <section className="menu-section dogchef-menu" id="dogchef-menu-list">
         <div className="section-heading menu-reveal menu-reveal--title"><div><p className="eyebrow">Cardápio completo</p><h2>Escolha seu favorito</h2></div><button className="menu-all-filter" onClick={() => selectCategory("all")}>Ver todas as categorias</button></div>
         {visibleCategories.map((category) => {
@@ -410,6 +406,8 @@ export function Storefront() {
         <div className="about-store-copy"><p className="eyebrow">Sobre nós</p><h2 id="about-title">O sabor do prensado, do seu jeito.</h2><p>O cardápio da Dog do Chef reúne hot dogs tradicionais, prensados, gratinados, combos, porções e bebidas. Escolha os adicionais, defina retirada ou entrega e acompanhe tudo pela sua conta.</p><a className="button button-primary" href="#cardapio">Escolher meu pedido <ChevronRight size={17}/></a></div>
         <div className="about-store-media"><Image src="/images/dogchef/hero-dog-do-chef.webp" alt="Hot dog prensado da Dog do Chef com acompanhamento" fill sizes="(max-width: 760px) 100vw, 54vw"/></div>
       </section>
+      </div>
+      </div>
 
       <footer className="store-footer">
         <div className="store-footer-brand"><div className="brand-lockup"><span className="brand-mark"><ChefHat size={20}/></span><span><strong>Dog do Chef</strong><small>hot dog prensado</small></span></div><p>Cardápio online com adicionais, retirada, entrega e acompanhamento do pedido.</p></div>

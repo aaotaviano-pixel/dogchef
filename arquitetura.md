@@ -92,15 +92,21 @@ idempotentes e status aprovado nao sofre downgrade por notificacao atrasada.
 
 `src/components/storefront.tsx` mantem os mesmos estados e handlers de catalogo, conta,
 carrinho e checkout, mas a composicao publica passou a seguir a direcao aprovada pela
-cliente: barra utilitaria, cabecalho com navegacao, hero escuro, beneficios, categorias,
-faixa editorial de destaques, cardapio completo, bloco institucional e rodape.
+cliente: barra utilitaria, cabecalho com navegacao, hero escuro, categorias automaticas,
+faixa editorial clara de destaques, cardapio completo com transicao tonal, bloco
+institucional e rodape.
 
 O hero e alimentado exclusivamente pelos produtos selecionados no Showcase. A selecao e a
 montagem das categorias foram extraidas para `src/lib/storefront-presentation.ts`, sem
 consulta adicional nem mudanca de contrato da API. O titulo "Destaques da casa" evita
 afirmar ranking de vendas inexistente.
 
-A pagina usa corpo creme e faixas escuras apenas no hero, destaques e rodape. O antigo
-preview escuro nao e mais aplicado pelo componente publico. Autoplay pausa durante
-interacao e quando a aba fica invisivel; `prefers-reduced-motion` remove movimentos.
-Nenhuma migration ou escrita de banco integra o redesign.
+A pagina usa corpo creme e hero escuro. `Destaques da casa` permanece em uma faixa branca;
+o wrapper `.storefront-dark-flow` comeca exatamente em `Escolha seu favorito` e aprofunda
+o fundo de grelha ate preto no final da pagina. Todas as categorias do cardapio completo
+usam cards escuros e texto claro. No mobile, o hero usa proporcao 4:3 e a faixa vermelha
+exibe categorias em loop automatico; a antiga faixa de beneficios nao existe mais.
+`buildCategoryMarqueeItems` cria duas copias deterministicas, deixando a segunda fora da
+navegacao assistiva. A faixa pausa durante interacao e retoma em 4,8 segundos; sob
+`prefers-reduced-motion`, a manchete fica estatica e o loop de categorias continua mais
+lento. Nenhuma migration ou escrita de banco integra o redesign.
