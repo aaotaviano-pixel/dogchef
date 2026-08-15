@@ -62,7 +62,8 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
 
 ## Previa visual local
 
-- O storefront usa corpo claro em creme, hero e destaques escuros e comandos vermelhos.
+- O storefront usa corpo creme, hero/cardapio/rodape escuros, destaques e `Sobre nos`
+  claros, com comandos vermelhos.
 - `NEXT_PUBLIC_DOGCHEF_DARK_PREVIEW` e legado e nao controla mais a composicao publica.
 - A decisao e somente visual; nunca alterar dados ou regras de negocio para mudar o tema.
 
