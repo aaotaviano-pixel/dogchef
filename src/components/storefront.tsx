@@ -402,11 +402,12 @@ export function Storefront() {
         })}
       </section>
 
+      </div>
+
       <section className="about-store menu-reveal" id="sobre" aria-labelledby="about-title">
         <div className="about-store-copy"><p className="eyebrow">Sobre nós</p><h2 id="about-title">O sabor do prensado, do seu jeito.</h2><p>O cardápio da Dog do Chef reúne hot dogs tradicionais, prensados, gratinados, combos, porções e bebidas. Escolha os adicionais, defina retirada ou entrega e acompanhe tudo pela sua conta.</p><a className="button button-primary" href="#cardapio">Escolher meu pedido <ChevronRight size={17}/></a></div>
         <div className="about-store-media"><Image src="/images/dogchef/hero-dog-do-chef.webp" alt="Hot dog prensado da Dog do Chef com acompanhamento" fill sizes="(max-width: 760px) 100vw, 54vw"/></div>
       </section>
-      </div>
       </div>
 
       <footer className="store-footer">

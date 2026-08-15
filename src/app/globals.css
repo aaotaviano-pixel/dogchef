@@ -2240,16 +2240,14 @@ a { color: inherit; text-decoration: none; }
 .storefront-reference-redesign .storefront-dark-flow .product-bottom strong { color: #FFF8F1; }
 .storefront-reference-redesign .storefront-dark-flow .product-copy p { color: #CDBDB3; }
 
-.storefront-reference-redesign .storefront-dark-flow .about-store {
-  margin-bottom: 0;
-  border-color: rgba(255,255,255,.18);
-  color: #FFF8F1;
-  background: rgba(17,15,13,.58);
+.storefront-reference-redesign .storefront-tone-flow > .about-store {
+  color: var(--store-ink);
+  background: #FFFEFC;
 }
-.storefront-reference-redesign .storefront-dark-flow .about-store-copy { padding-left: 34px; }
-.storefront-reference-redesign .storefront-dark-flow .about-store-copy .eyebrow { color: var(--store-mustard); }
-.storefront-reference-redesign .storefront-dark-flow .about-store h2 { color: #FFF8F1; }
-.storefront-reference-redesign .storefront-dark-flow .about-store-copy > p:not(.eyebrow) { color: #D4C5BC; }
+.storefront-reference-redesign .storefront-tone-flow > .about-store .about-store-copy { padding-left: 34px; }
+.storefront-reference-redesign .storefront-tone-flow > .about-store .eyebrow { color: var(--store-red); }
+.storefront-reference-redesign .storefront-tone-flow > .about-store h2 { color: var(--store-ink); }
+.storefront-reference-redesign .storefront-tone-flow > .about-store .about-store-copy > p:not(.eyebrow) { color: #6F6158; }
 
 @media (max-width: 1099px) {
   .storefront-reference-redesign .category-marquee { grid-template-columns: 160px minmax(0, 1fr); gap: 16px; }
@@ -2351,8 +2349,8 @@ a { color: inherit; text-decoration: none; }
   .storefront-reference-redesign .storefront-tone-flow { width: calc(100% + 24px); margin-left: -12px; }
   .storefront-reference-redesign .storefront-tone-flow .featured-band { width: 100%; margin: 0; padding: 42px 12px 48px; }
   .storefront-reference-redesign .storefront-tone-flow .dogchef-menu { width: 100%; padding: 48px 12px 24px; }
-  .storefront-reference-redesign .storefront-dark-flow .about-store { width: calc(100% - 24px); margin-right: 12px; margin-left: 12px; }
-  .storefront-reference-redesign .storefront-dark-flow .about-store-copy { padding: 34px 15px; }
+  .storefront-reference-redesign .storefront-tone-flow > .about-store { width: calc(100% - 24px); margin-right: 12px; margin-left: 12px; }
+  .storefront-reference-redesign .storefront-tone-flow > .about-store .about-store-copy { padding: 34px 15px; }
   .storefront-reference-redesign .store-footer { padding-bottom: 30px; }
   .storefront-reference-redesign .dogchef-social-stack,
   .storefront-reference-redesign .dogchef-social-stack.with-cart {

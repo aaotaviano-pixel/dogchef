@@ -45,8 +45,9 @@ also explicitly requested production deployment after validation.
 - Start a separate full-width dark flow exactly at `Escolha seu favorito`.
 - Render every full-menu category and product card on dark surfaces with light text.
 - Deepen the background from warm grill-black at the menu heading to near-black at the
-  about section and footer, creating the requested gradient while scrolling.
-- Keep the about section as the final dark editorial block before the footer.
+  end of the full menu, creating the requested gradient while scrolling.
+- Return the about section to a clean white surface with dark text before the footer, as
+  requested in the final visual adjustment.
 
 ## Accessibility and performance
 

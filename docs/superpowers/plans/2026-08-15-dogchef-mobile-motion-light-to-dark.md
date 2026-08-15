@@ -73,7 +73,9 @@ Render flattened marquee items directly below the hero. Duplicate items use `ari
 - [ ] **Step 4: Separate the light highlights from the dark menu flow**
 
 Keep `Destaques da casa` in `.storefront-tone-flow` and wrap the full menu plus about
-section in `.storefront-dark-flow`; do not move the footer, dialogs, cart, or social controls.
+section initially in `.storefront-dark-flow`. The final approved adjustment keeps only the
+full menu in `.storefront-dark-flow` and returns `Sobre nos` to the white tone flow; do not
+move the footer, dialogs, cart, or social controls.
 
 ### Task 3: Implement the visual system
 

@@ -103,8 +103,9 @@ afirmar ranking de vendas inexistente.
 
 A pagina usa corpo creme e hero escuro. `Destaques da casa` permanece em uma faixa branca;
 o wrapper `.storefront-dark-flow` comeca exatamente em `Escolha seu favorito` e aprofunda
-o fundo de grelha ate preto no final da pagina. Todas as categorias do cardapio completo
-usam cards escuros e texto claro. No mobile, o hero usa proporcao 4:3 e a faixa vermelha
+o fundo de grelha ate preto ao final do cardapio completo. Todas as categorias usam cards
+escuros e texto claro; `Sobre nos` fica fora desse wrapper e retorna ao fundo branco com
+texto escuro antes do rodape. No mobile, o hero usa proporcao 4:3 e a faixa vermelha
 exibe categorias em loop automatico; a antiga faixa de beneficios nao existe mais.
 `buildCategoryMarqueeItems` cria duas copias deterministicas, deixando a segunda fora da
 navegacao assistiva. A faixa pausa durante interacao e retoma em 4,8 segundos; sob

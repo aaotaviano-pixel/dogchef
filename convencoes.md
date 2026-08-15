@@ -108,6 +108,8 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
   de categorias, sem desativar o movimento automatico solicitado.
 - `Destaques da casa` usa superficie clara. O wrapper `.storefront-dark-flow` comeca em
   `Escolha seu favorito`; desde a primeira categoria, cards e textos usam tema escuro.
+  O wrapper termina junto com o cardapio e `Sobre nos` volta para superficie branca com
+  texto escuro.
 - No mobile, Instagram e WhatsApp ficam no final da pagina, sem flutuar sobre produtos.
 
 ## Protecao de API

@@ -158,3 +158,9 @@
   375, 390, 414, 768, 1024, 1440 e 1920 px ficaram sem overflow.
 - Filtro de categoria, modal de produto, carrinho, autoplay e pausa manual foram testados.
 - Alteracao validada e publicada na Vercel sem migration ou alteracao de dados remotos.
+
+## 2026-08-15 — Secao Sobre nos novamente clara
+
+- O wrapper escuro passou a terminar junto com o cardapio completo.
+- `Sobre nos` voltou para uma superficie branca, com textos escuros e os mesmos conteudo,
+  imagem e CTA; nenhuma regra de negocio, API, produto ou dado foi alterado.
