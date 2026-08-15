@@ -64,6 +64,7 @@ function productVisualTreatment(product: Product) {
 export function Storefront() {
   const router = useRouter();
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState("");
@@ -74,6 +75,7 @@ export function Storefront() {
   const [accountOpen, setAccountOpen] = useState(false);
   const [customer, setCustomer] = useState<CustomerAccount | null>(null);
   const [activeCategory, setActiveCategory] = useState("all");
+  const [activeNavSection, setActiveNavSection] = useState("inicio");
   const [formError, setFormError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [heroCarouselPaused, setHeroCarouselPaused] = useState(false);
@@ -107,7 +109,8 @@ export function Storefront() {
     fetch("/api/v1/menu")
       .then((response) => response.json())
       .then((data: Catalog) => setCatalog(data))
-      .catch(() => setFormError("Não conseguimos carregar o cardápio. Atualize a página para tentar novamente."));
+      .catch(() => setFormError("Não conseguimos carregar o cardápio. Atualize a página para tentar novamente."))
+      .finally(() => setCatalogLoading(false));
     fetch("/api/v1/customer/session", { cache: "no-store" })
       .then((response) => response.json())
       .then((data: { customer: CustomerAccount | null }) => { if (data.customer) handleCustomerAuth(data.customer); })
@@ -174,6 +177,36 @@ export function Storefront() {
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
   }, [catalog, activeCategory]);
+
+  useEffect(() => {
+    const sectionMap = [
+      ["inicio", "inicio"],
+      ["cardapio", "cardapio"],
+      ["destaques", "destaques"],
+      ["dogchef-menu-list", "cardapio"],
+      ["sobre", "sobre"],
+    ] as const;
+    const sections = sectionMap.flatMap(([id, navSection]) => {
+      const element = document.getElementById(id);
+      return element ? [{ element, navSection }] : [];
+    });
+    if (!("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting);
+        if (!visible.length) return;
+        const closest = visible.reduce((current, entry) => (
+          Math.abs(entry.boundingClientRect.top - window.innerHeight * .34)
+            < Math.abs(current.boundingClientRect.top - window.innerHeight * .34) ? entry : current
+        ));
+        const match = sections.find(({ element }) => element === closest.target);
+        if (match) setActiveNavSection(match.navSection);
+      },
+      { rootMargin: "-24% 0px -62% 0px", threshold: [0, .15, .5] },
+    );
+    sections.forEach(({ element }) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [catalogLoading, featuredProducts.length]);
 
   const subtotal = useMemo(() => cart.reduce((sum, line) => sum + linePrice(line, catalog), 0), [cart, catalog]);
   const totalItems = cart.reduce((sum, line) => sum + line.quantity, 0);
@@ -319,13 +352,13 @@ export function Storefront() {
         </div>
       </div>
 
-      <header className="store-header" id="inicio">
+      <header className="store-header">
         <a className="brand-lockup" href="#inicio" aria-label="Dog do Chef, início"><span className="brand-mark"><ChefHat size={23}/></span><span><strong>Dog do Chef</strong><small>hot dog prensado</small></span></a>
         <nav className="store-main-nav" aria-label="Navegação principal">
-          <a href="#inicio">Início</a>
-          <a href="#cardapio">Cardápio</a>
-          <a href="#destaques">Destaques</a>
-          <a href="#sobre">Sobre nós</a>
+          <a className={activeNavSection === "inicio" ? "is-active" : undefined} aria-current={activeNavSection === "inicio" ? "location" : undefined} href="#inicio">Início</a>
+          <a className={activeNavSection === "cardapio" ? "is-active" : undefined} aria-current={activeNavSection === "cardapio" ? "location" : undefined} href="#cardapio">Cardápio</a>
+          <a className={activeNavSection === "destaques" ? "is-active" : undefined} aria-current={activeNavSection === "destaques" ? "location" : undefined} href="#destaques">Destaques</a>
+          <a className={activeNavSection === "sobre" ? "is-active" : undefined} aria-current={activeNavSection === "sobre" ? "location" : undefined} href="#sobre">Sobre nós</a>
         </nav>
         <div className="store-header-actions">
           <button className="icon-button account-button" aria-label={customer ? "Abrir minha conta" : "Entrar na minha conta"} onClick={() => setAccountOpen(true)}><UserRound size={19}/></button>
@@ -335,6 +368,7 @@ export function Storefront() {
 
       <section
         className="hero dogchef-hero menu-reveal menu-reveal--title"
+        id="inicio"
         aria-roledescription="carrossel"
         aria-label="Destaques do cardápio"
         onPointerDown={pauseHeroCarousel}
@@ -385,7 +419,12 @@ export function Storefront() {
         </nav>
       </section>
 
-      <div className="storefront-tone-flow">
+      <div className="storefront-tone-flow" aria-busy={catalogLoading}>
+      {catalogLoading && <section className="storefront-loading" role="status" aria-live="polite">
+        <span className="sr-only">Carregando cardápio</span>
+        <div className="storefront-loading-heading"><span/><b/></div>
+        <div className="storefront-loading-grid">{[0, 1, 2, 3].map((item) => <span key={item} className="storefront-loading-card" aria-hidden="true"><i/><b/><small/><em/></span>)}</div>
+      </section>}
       {featuredProducts.length > 0 && <section className="featured-section featured-band menu-reveal menu-reveal--title" id="destaques" aria-labelledby="featured-title">
         <div className="featured-section-inner">
           <header className="section-heading"><div><p className="eyebrow">Selecionados no Showcase</p><h2 id="featured-title">Destaques da casa</h2></div><a href="#dogchef-menu-list">Ver cardápio completo <ChevronRight size={16}/></a></header>
@@ -396,7 +435,7 @@ export function Storefront() {
         </div>
       </section>}
 
-      <div className="storefront-dark-flow">
+      {!catalogLoading && <div className="storefront-dark-flow">
       <section className="menu-section dogchef-menu" id="dogchef-menu-list">
         <div className="section-heading menu-reveal menu-reveal--title"><div><p className="eyebrow">Cardápio completo</p><h2>Escolha seu favorito</h2></div><button className="menu-all-filter" onClick={() => selectCategory("all")}>Ver todas as categorias</button></div>
         {visibleCategories.map((category) => {
@@ -415,7 +454,7 @@ export function Storefront() {
         })}
       </section>
 
-      </div>
+      </div>}
 
       <section className="about-store menu-reveal" id="sobre" aria-labelledby="about-title">
         <div className="about-store-copy"><p className="eyebrow">Sobre nós</p><h2 id="about-title">O sabor do prensado, do seu jeito.</h2><p>O cardápio da Dog do Chef reúne hot dogs tradicionais, prensados, gratinados, combos, porções e bebidas. Escolha os adicionais, defina retirada ou entrega e acompanhe tudo pela sua conta.</p><a className="button button-primary" href="#cardapio">Escolher meu pedido <ChevronRight size={17}/></a></div>

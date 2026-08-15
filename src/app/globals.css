@@ -2387,6 +2387,7 @@ a { color: inherit; text-decoration: none; }
   --motion-base: 260ms;
   --motion-reveal: 620ms;
   --motion-ease: cubic-bezier(.2, .8, .2, 1);
+  overflow: clip;
 }
 
 .storefront-reference-redesign :is(button, a, input, textarea, select) { touch-action: manipulation; }
@@ -2501,4 +2502,191 @@ a { color: inherit; text-decoration: none; }
   .admin-manager * { scroll-behavior: auto !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 
   .storefront-reference-redesign .menu-reveal { opacity: 1; transform: none; }
+}
+
+/* UX polish: one motion language across storefront, account and admin surfaces. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.storefront-reference-redesign .store-header::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--store-red), var(--store-mustard));
+  content: "";
+  opacity: .82;
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+@supports (animation-timeline: scroll()) {
+  .storefront-reference-redesign .store-header::after {
+    animation: storefront-scroll-progress linear both;
+    animation-timeline: scroll(root block);
+  }
+}
+
+@keyframes storefront-scroll-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.storefront-reference-redesign .store-main-nav a.is-active {
+  color: var(--store-red);
+}
+
+.storefront-reference-redesign .store-main-nav a.is-active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.storefront-reference-redesign :is(#inicio, #cardapio, #destaques, #sobre) {
+  scroll-margin-top: 104px;
+}
+
+.storefront-loading {
+  width: min(100%, 1280px);
+  min-height: 470px;
+  margin: 0 auto;
+  padding: 54px 20px 68px;
+}
+
+.storefront-loading-heading {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.storefront-loading-heading span,
+.storefront-loading-heading b,
+.storefront-loading-card :is(i, b, small, em) {
+  display: block;
+  border-radius: 5px;
+  background: linear-gradient(100deg, var(--brand-grill-soft) 18%, var(--brand-cream) 42%, var(--brand-grill-soft) 66%);
+  background-size: 220% 100%;
+  animation: dogchef-skeleton 1.25s ease-in-out infinite;
+}
+
+.storefront-loading-heading span { width: 108px; height: 9px; }
+.storefront-loading-heading b { width: min(330px, 68vw); height: 30px; }
+.storefront-loading-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.storefront-loading-card { display: grid; gap: 11px; min-width: 0; padding: 10px 10px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.storefront-loading-card i { aspect-ratio: 4 / 3; }
+.storefront-loading-card b { width: 72%; height: 15px; }
+.storefront-loading-card small { width: 92%; height: 9px; }
+.storefront-loading-card em { width: 38%; height: 17px; margin-top: 7px; }
+
+@keyframes dogchef-skeleton {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
+@supports (content-visibility: auto) {
+  .storefront-reference-redesign .dogchef-menu-section {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 760px;
+  }
+}
+
+.route-loading {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  color: var(--brand-grill);
+  background: var(--brand-cream);
+}
+
+.route-loading-card {
+  display: grid;
+  width: min(100%, 300px);
+  justify-items: center;
+  gap: 7px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  animation: page-enter .36s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.route-loading-card .brand-mark { width: 64px; height: 64px; margin-bottom: 5px; }
+.route-loading-card strong { font-family: Impact, "Arial Narrow", Arial, sans-serif; font-size: 22px; text-transform: uppercase; }
+.route-loading-card > span:not(.brand-mark) { color: var(--muted); font-size: 11px; }
+.route-loading-card i { width: 100%; height: 3px; overflow: hidden; margin-top: 12px; border-radius: 3px; background: var(--brand-grill-soft); }
+.route-loading-card i::after { display: block; width: 42%; height: 100%; background: var(--brand-red); content: ""; animation: route-loading-progress 1s ease-in-out infinite alternate; }
+
+@keyframes route-loading-progress {
+  from { transform: translateX(0); }
+  to { transform: translateX(138%); }
+}
+
+:is(.account-shell, .tracker-shell, .legal-shell, .auth-callback-shell, .admin-login, .admin-shell, .centered-error) {
+  animation: page-enter .36s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+:is(.form-error, .product-editor-error, .admin-error, .admin-notice, .customer-notice) {
+  animation: feedback-enter .24s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes feedback-enter {
+  from { opacity: 0; transform: translate3d(0, -5px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.storefront-reference-redesign .field :is(input, textarea):user-invalid,
+.admin-manager .editor-field :is(input, textarea, select):user-invalid {
+  border-color: var(--brand-red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-red) 12%, transparent);
+}
+
+.storefront-reference-redesign .empty-state,
+.admin-manager :is(.dashboard-empty, .showcase-empty),
+.account-shell .account-empty {
+  border: 1px dashed color-mix(in srgb, var(--brand-red) 24%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand-cream) 72%, var(--paper));
+}
+
+.storefront-reference-redesign .empty-state {
+  min-height: 190px;
+  align-content: center;
+  gap: 12px;
+}
+
+.storefront-reference-redesign .empty-state p { margin: 0; }
+.admin-manager .dashboard-empty { margin-top: 8px; }
+
+@media (max-width: 760px) {
+  .storefront-loading { min-height: 410px; padding: 42px 12px 52px; }
+  .storefront-loading-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .storefront-loading-card:nth-child(n + 3) { display: none; }
+  .storefront-reference-redesign .store-header::after { left: 12px; right: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .storefront-reference-redesign .store-header::after { animation: none; opacity: 0; }
+  .storefront-loading-heading span,
+  .storefront-loading-heading b,
+  .storefront-loading-card :is(i, b, small, em),
+  .route-loading-card,
+  .route-loading-card i::after,
+  :is(.account-shell, .tracker-shell, .legal-shell, .auth-callback-shell, .admin-login, .admin-shell, .centered-error),
+  :is(.form-error, .product-editor-error, .admin-error, .admin-notice, .customer-notice) { animation: none; }
 }
