@@ -5,7 +5,7 @@ import path from "node:path";
 import { createQuote } from "@/lib/checkout";
 import { canTransition, hashTrackingToken, newOrderId, newPublicCode, newTrackingToken } from "@/lib/orders";
 import { defaultWorkingHours, products, seededCatalog } from "@/lib/seed";
-import { configuredPrinterOptions, defaultPrinterId, parseDiscoveredPrinters } from "@/lib/printers";
+import { configuredPrinterOptions, defaultPrinterId, parseDiscoveredPrinters, preferredPrinterId } from "@/lib/printers";
 import { normalizeNeighborhood } from "@/lib/shop";
 import { getSupabase, hasSupabase } from "@/lib/supabase";
 import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, PrintSettings, Product, ProductImage, ProductInput, PrinterOption, WorkingHour } from "@/lib/types";
@@ -1360,7 +1360,7 @@ export async function getPrintSettings(): Promise<PrintSettings> {
   const printers = discovered.printers.length ? discovered.printers : configuredPrinterOptions();
   const selectedPrinterId = printers.some((printer) => printer.id === memory.selectedPrinterId)
     ? memory.selectedPrinterId
-    : (printers[0]?.id ?? defaultPrinterId());
+    : preferredPrinterId(printers);
   const lastSeenMillis = discovered.lastSeenAt ? Date.parse(discovered.lastSeenAt) : 0;
   return {
     selectedPrinterId,

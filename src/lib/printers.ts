@@ -41,6 +41,10 @@ export function defaultPrinterId() {
   return configuredPrinterOptions()[0]?.id ?? fallbackPrinter.id;
 }
 
+export function preferredPrinterId(printers: PrinterOption[], fallback = defaultPrinterId()) {
+  return printers.find((printer) => printer.isDefault)?.id ?? printers[0]?.id ?? fallback;
+}
+
 export function isConfiguredPrinter(id: string) {
   return configuredPrinterOptions().some((printer) => printer.id === id);
 }

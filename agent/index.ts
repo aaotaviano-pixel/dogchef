@@ -3,7 +3,6 @@
  * polls the protected application API, claims a leased job, and emits ESC/POS.
  */
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
@@ -12,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import { getPrinterAttributesRequest, ippRequest, ippStatusText, printJobRequest } from "./ipp";
+import { discoverWindowsPrinters } from "./windows-printers";
 
 type TicketLine = { productName: string; quantity: number; optionals: { name: string }[]; note?: string };
 type Ticket = {
@@ -86,41 +86,28 @@ function printerProfiles(): PrinterProfile[] {
   }
 }
 
-function windowsPrinterId(name: string) {
-  const slug = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || "printer";
-  const hash = createHash("sha1").update(name).digest("hex").slice(0, 8);
-  return `windows-${slug}-${hash}`;
-}
-
-function windowsPrinterStatus(status: string, workOffline: boolean): "ready" | "offline" | "unknown" {
-  if (workOffline || status === "7" || status.toLowerCase().includes("offline")) return "offline";
-  if (["3", "4", "5", "idle", "printing", "warmup"].includes(status.toLowerCase())) return "ready";
-  return "unknown";
-}
-
 let discoveredPrinterCache: { at: number; printers: PrinterProfile[] } | undefined;
 
 async function discoverInstalledPrinters(): Promise<PrinterProfile[]> {
   if (process.platform !== "win32") return [];
   if (discoveredPrinterCache && Date.now() - discoveredPrinterCache.at < 15_000) return discoveredPrinterCache.printers;
   const script = [
-    "$items = Get-CimInstance -ClassName Win32_Printer | ForEach-Object { [pscustomobject]@{ name = [string]$_.Name; isDefault = [bool]$_.Default; printerStatus = [string]$_.PrinterStatus; workOffline = [bool]$_.WorkOffline } }",
+    "$items = Get-CimInstance -ClassName Win32_Printer | ForEach-Object { [pscustomobject]@{ name = [string]$_.Name; isDefault = [bool]$_.Default; printerStatus = [string]$_.PrinterStatus; workOffline = [bool]$_.WorkOffline; driverName = [string]$_.DriverName } }",
     "$items | ConvertTo-Json -Compress",
   ].join("; ");
   try {
     const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { windowsHide: true, timeout: 10_000 });
     const parsed = JSON.parse(stdout.trim() || "[]") as unknown;
     const items = (Array.isArray(parsed) ? parsed : [parsed]).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"));
-    const printers = items
-      .filter((item) => typeof item.name === "string" && item.name.trim())
+    const printers = discoverWindowsPrinters(items
+      .filter((item) => typeof item.name === "string")
       .map((item) => ({
-        id: windowsPrinterId(String(item.name)),
-        name: String(item.name).trim(),
-        transport: "windows-raw" as const,
-        windowsName: String(item.name).trim(),
-        status: windowsPrinterStatus(String(item.printerStatus ?? ""), item.workOffline === true),
+        name: String(item.name),
         isDefault: item.isDefault === true,
-      }));
+        printerStatus: String(item.printerStatus ?? ""),
+        workOffline: item.workOffline === true,
+        driverName: typeof item.driverName === "string" ? item.driverName : undefined,
+      })), process.env.PRINT_INCLUDE_VIRTUAL_PRINTERS === "true");
     discoveredPrinterCache = { at: Date.now(), printers };
     return printers;
   } catch {

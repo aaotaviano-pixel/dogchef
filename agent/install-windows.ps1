@@ -11,12 +11,12 @@ if (-not (Test-Path -LiteralPath $agentEnv -PathType Leaf)) {
   throw "Arquivo agent\.env nao encontrado. Copie agent\.env.example e configure o token antes de instalar."
 }
 
-$cmd = (Get-Command cmd.exe -ErrorAction Stop).Source
-$npm = (Get-Command npm.cmd -ErrorAction Stop).Source
+$powershell = (Get-Command powershell.exe -ErrorAction Stop).Source
+$runner = Join-Path $resolvedRoot "agent\run-agent.ps1"
 $user = "$env:USERDOMAIN\$env:USERNAME"
-$arguments = "/d /c `"$npm`" run print-agent --prefix `"$resolvedRoot`""
+$arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -ProjectRoot `"$resolvedRoot`""
 
-$action = New-ScheduledTaskAction -Execute $cmd -Argument $arguments -WorkingDirectory $resolvedRoot
+$action = New-ScheduledTaskAction -Execute $powershell -Argument $arguments -WorkingDirectory $resolvedRoot
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
 $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited

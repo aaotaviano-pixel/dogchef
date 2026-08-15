@@ -25,7 +25,18 @@ e perdido e pode ser reimpresso pelo painel.
 - Nao coloque senha, token ou endereco interno da impressora na Vercel, no GitHub ou
   no painel do cliente. Esses dados ficam somente no computador da cozinha.
 
-## Configuracao inicial do agente
+## Configuracao inicial sem terminal
+
+Depois de instalar a impressora no Windows, a administradora deve apenas dar dois
+cliques em `Instalar-Impressao-DogChef.cmd`, dentro da pasta `C:\DOGCHEF`.
+
+O assistente mostra as impressoras fisicas encontradas, pede a chave de conexao uma
+unica vez e configura a inicializacao automatica junto com o Windows. A impressora
+marcada como **padrao** em Configuracoes > Impressoras do Windows sera selecionada
+automaticamente no painel DogChef. Filas como PDF, OneNote e Fax ficam escondidas para
+nao confundir a escolha.
+
+## Configuracao manual do agente
 
 No computador ligado a impressora, abra o PowerShell e execute:
 
@@ -150,4 +161,3 @@ computador local com o agente faz essa conexao.
 | `Agente nao autorizado` | O token local nao corresponde ao token privado da Vercel. Gere/atualize-o somente pela administracao tecnica. |
 | Pedido salvo, mas sem impressao | Deixe o agente ativo, corrija a impressora e use **Reimprimir pedido**. |
 | Painel nao permite teste | Confirme a senha administrativa atual e se a migration de teste de impressao foi aplicada no banco. |
-
