@@ -104,6 +104,8 @@ Toque, foco, roda do mouse ou selecao de categoria pausam o movimento por 4,8 se
   visual, usa `aria-hidden` e nao recebe foco.
 - Interacao pausa a faixa temporariamente e retoma em 4,8 segundos; foco de toque nao pode
   prender a animacao. Botoes originais continuam filtrando o menu.
+- A manchete do hero alterna exatamente tres mensagens curtas e verdadeiras no ciclo do
+  Showcase. Nao inserir ranking, promocao ou promessa comercial sem fonte real.
 - Sob `prefers-reduced-motion`, manter a manchete estatica e reduzir a velocidade da faixa
   de categorias, sem desativar o movimento automatico solicitado.
 - `Destaques da casa` usa superficie clara. O wrapper `.storefront-dark-flow` comeca em

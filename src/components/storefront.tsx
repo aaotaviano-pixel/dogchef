@@ -18,6 +18,12 @@ const emptyCatalog: Catalog = {
 
 const WHATSAPP_PENDING_URL = "https://wa.me/[PENDENTE-CLIENTE]";
 
+const HERO_HEADLINES = [
+  { lead: "Hot dog", accent: "prensado", tail: "feito na hora." },
+  { lead: "Escolha.", accent: "Personalize.", tail: "É só pedir." },
+  { lead: "Tradicionais,", accent: "gratinados", tail: "e combos." },
+] as const;
+
 function linePrice(line: CartLine, catalog: Catalog) {
   const product = catalog.products.find((item) => item.id === line.productId);
   if (!product) return 0;
@@ -79,8 +85,10 @@ export function Storefront() {
     street: "", number: "", neighborhood: "", complement: "", reference: "",
   });
   const [heroIndex, setHeroIndex] = useState(0);
+  const [heroHeadlineIndex, setHeroHeadlineIndex] = useState(0);
   const showcaseProducts = useMemo(() => selectShowcaseProducts(catalog.products), [catalog.products]);
   const heroProduct = showcaseProducts.length ? showcaseProducts[heroIndex % showcaseProducts.length] : null;
+  const heroHeadline = HERO_HEADLINES[heroHeadlineIndex % HERO_HEADLINES.length];
   const featuredProducts = showcaseProducts.slice(0, 4);
   const categoryTiles = useMemo(() => buildCategoryTiles(catalog.categories, catalog.products), [catalog.categories, catalog.products]);
   const categoryMarqueeItems = useMemo(() => buildCategoryMarqueeItems(categoryTiles), [categoryTiles]);
@@ -118,11 +126,14 @@ export function Storefront() {
   }, [cart]);
 
   useEffect(() => {
-    if (showcaseProducts.length < 2 || heroCarouselPaused) return;
+    if (heroCarouselPaused) return;
     let timer: number | null = null;
     const start = () => {
       if (document.visibilityState !== "visible" || timer !== null) return;
-      timer = window.setInterval(() => setHeroIndex((current) => (current + 1) % showcaseProducts.length), 4_800);
+      timer = window.setInterval(() => {
+        if (showcaseProducts.length > 1) setHeroIndex((current) => (current + 1) % showcaseProducts.length);
+        setHeroHeadlineIndex((current) => (current + 1) % HERO_HEADLINES.length);
+      }, 4_800);
     };
     const stop = () => {
       if (timer !== null) window.clearInterval(timer);
@@ -334,10 +345,12 @@ export function Storefront() {
           if (event.key === "ArrowLeft") {
             pauseHeroCarousel();
             setHeroIndex((current) => (current - 1 + showcaseProducts.length) % showcaseProducts.length);
+            setHeroHeadlineIndex((current) => (current - 1 + HERO_HEADLINES.length) % HERO_HEADLINES.length);
           }
           if (event.key === "ArrowRight") {
             pauseHeroCarousel();
             setHeroIndex((current) => (current + 1) % showcaseProducts.length);
+            setHeroHeadlineIndex((current) => (current + 1) % HERO_HEADLINES.length);
           }
         }}
       >
@@ -347,15 +360,15 @@ export function Storefront() {
         <span className="showcase-shade" aria-hidden="true"/>
         <div className="hero-content">
           <p className="eyebrow"><span className={catalog.acceptingOrders ? "dot" : "dot paused"}/> {catalog.acceptingOrders ? "Pedidos abertos" : "Loja pausada"}</p>
-          <div className="hero-title-motion" key={heroProduct?.id ?? "dogchef-showcase"}>
+          <div className="hero-title-motion" key={`${heroProduct?.id ?? "dogchef-showcase"}:${heroHeadlineIndex}`}>
             <p className="showcase-kicker">Dog do Chef</p>
-            <h1><span>Hot dog</span> <em>prensado</em> <span>feito na hora.</span></h1>
+            <h1><span>{heroHeadline.lead}</span> <em>{heroHeadline.accent}</em> <span>{heroHeadline.tail}</span></h1>
           </div>
           <div className="hero-featured-copy"><strong>{heroProduct?.name ?? "Cardápio Dog do Chef"}</strong><p>{heroProduct?.description || "Hot dogs, gratinados, porções e bebidas para pedir pelo celular."}</p></div>
           <div className="showcase-actions"><button className="button button-primary" disabled={!heroProduct || !catalog.acceptingOrders} onClick={() => heroProduct && openProduct(heroProduct)}>Pedir agora <Plus size={17}/></button><a className="button button-outline" href="#cardapio">Ver cardápio <ChevronDown size={17}/></a>{heroProduct && <strong>{formatCurrency(heroProduct.priceCents)}</strong>}</div>
           <div className="hero-meta"><span><Clock3 size={15}/>{catalog.hoursLabel}</span><span><MapPin size={15}/>Entrega padrão {formatCurrency(catalog.defaultDeliveryFeeCents)}</span></div>
         </div>
-        {showcaseProducts.length > 1 && <div className="showcase-controls"><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current - 1 + showcaseProducts.length) % showcaseProducts.length); }} aria-label="Destaque anterior"><ChevronLeft size={19}/></button><div role="tablist" aria-label="Escolher destaque">{showcaseProducts.map((product, index) => <button key={product.id} className={index === heroIndex % showcaseProducts.length ? "showcase-dot is-active" : "showcase-dot"} onClick={() => { pauseHeroCarousel(); setHeroIndex(index); }} aria-label={`Ver ${product.name}`} aria-selected={index === heroIndex % showcaseProducts.length} role="tab"/>)}</div><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current + 1) % showcaseProducts.length); }} aria-label="Próximo destaque"><ChevronRight size={19}/></button></div>}
+        {showcaseProducts.length > 1 && <div className="showcase-controls"><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current - 1 + showcaseProducts.length) % showcaseProducts.length); setHeroHeadlineIndex((current) => (current - 1 + HERO_HEADLINES.length) % HERO_HEADLINES.length); }} aria-label="Destaque anterior"><ChevronLeft size={19}/></button><div role="tablist" aria-label="Escolher destaque">{showcaseProducts.map((product, index) => <button key={product.id} className={index === heroIndex % showcaseProducts.length ? "showcase-dot is-active" : "showcase-dot"} onClick={() => { pauseHeroCarousel(); setHeroIndex(index); setHeroHeadlineIndex(index % HERO_HEADLINES.length); }} aria-label={`Ver ${product.name}`} aria-selected={index === heroIndex % showcaseProducts.length} role="tab"/>)}</div><button onClick={() => { pauseHeroCarousel(); setHeroIndex((current) => (current + 1) % showcaseProducts.length); setHeroHeadlineIndex((current) => (current + 1) % HERO_HEADLINES.length); }} aria-label="Próximo destaque"><ChevronRight size={19}/></button></div>}
       </section>
 
       <section className="category-marquee menu-reveal" id="cardapio" aria-labelledby="category-title">

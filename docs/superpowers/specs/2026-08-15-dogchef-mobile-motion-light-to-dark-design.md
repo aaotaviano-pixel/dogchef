@@ -20,7 +20,9 @@ also explicitly requested production deployment after validation.
   corners, full-bleed photography, and a controlled dark overlay.
 - Keep one primary action and the real product price visible; hide secondary copy that
   would make the rectangle tall or crowded.
-- Animate the headline in three short stages whenever the Showcase product changes.
+- Animate each headline in three short stages whenever the Showcase product changes.
+- Rotate three factual institutional headlines in sequence, synchronized with automatic
+  and manual Showcase navigation.
 - Keep automatic Showcase rotation, manual controls, pause after interaction, tab
   visibility handling, and reduced-motion support.
 - Preserve the existing desktop composition, applying only compatible motion and polish.

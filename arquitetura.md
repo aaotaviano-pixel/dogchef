@@ -101,6 +101,10 @@ montagem das categorias foram extraidas para `src/lib/storefront-presentation.ts
 consulta adicional nem mudanca de contrato da API. O titulo "Destaques da casa" evita
 afirmar ranking de vendas inexistente.
 
+No mesmo ciclo de 4,8 segundos, `heroHeadlineIndex` alterna tres manchetes institucionais
+curtas. A navegacao manual tambem sincroniza imagem e manchete; nenhuma frase depende de
+campo novo, migration ou alteracao no cadastro do Showcase.
+
 A pagina usa corpo creme e hero escuro. `Destaques da casa` permanece em uma faixa branca;
 o wrapper `.storefront-dark-flow` comeca exatamente em `Escolha seu favorito` e aprofunda
 o fundo de grelha ate preto ao final do cardapio completo. Todas as categorias usam cards

@@ -2045,7 +2045,8 @@ a { color: inherit; text-decoration: none; }
 
 .storefront-reference-redesign .hero-title-motion h1 > span,
 .storefront-reference-redesign .hero-title-motion h1 > em {
-  display: inline-block;
+  display: block;
+  width: fit-content;
   opacity: 0;
   animation: hero-word-rise .58s cubic-bezier(.2,.8,.2,1) both;
 }

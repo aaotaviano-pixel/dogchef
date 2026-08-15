@@ -164,3 +164,11 @@
 - O wrapper escuro passou a terminar junto com o cardapio completo.
 - `Sobre nos` voltou para uma superficie branca, com textos escuros e os mesmos conteudo,
   imagem e CTA; nenhuma regra de negocio, API, produto ou dado foi alterado.
+
+## 2026-08-15 — Tres manchetes animadas no Showcase
+
+- A manchete unica do hero passou a alternar tres mensagens institucionais a cada 4,8 s:
+  hot dog prensado feito na hora; escolha, personalize e peca; tradicionais, gratinados e
+  combos.
+- A troca usa a animacao existente e acompanha autoplay e controles manuais, sem alterar
+  imagens ou dados administrados no Showcase.

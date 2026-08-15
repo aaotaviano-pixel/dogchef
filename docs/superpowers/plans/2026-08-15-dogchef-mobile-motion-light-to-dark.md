@@ -65,6 +65,8 @@ Delete the four benefit articles and remove now-unused icon imports.
 - [ ] **Step 2: Add animated headline structure**
 
 Key the headline wrapper by the current Showcase product and split the headline into three spans while preserving the same accessible text.
+The final enhancement also cycles three institutional headlines through that same keyed
+animation, synchronized with automatic and manual Showcase changes.
 
 - [ ] **Step 3: Place category cards in the red marquee**
 
