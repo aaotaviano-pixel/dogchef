@@ -859,6 +859,7 @@ export async function transitionOrder(
   expectedVersion: number,
   reason?: string,
   printerId?: string,
+  queuePrint = true,
 ) {
   const orders = await listOrders();
   const existing = orders.find((order) => order.id === id);
@@ -890,7 +891,7 @@ export async function transitionOrder(
       reason: reason ?? null,
       actor: "admin",
     });
-    if (target === "confirmed") {
+    if (target === "confirmed" && queuePrint) {
       const printerSettings = await getPrintSettings();
       const selectedPrinterId = printerId && printerSettings.printers.some((printer) => printer.id === printerId) ? printerId : printerSettings.selectedPrinterId;
       await db.from("print_jobs").upsert(
@@ -906,7 +907,7 @@ export async function transitionOrder(
   targetOrder.version += 1;
   targetOrder.updatedAt = updatedAt;
   targetOrder.events.push(event);
-  if (target === "confirmed") {
+  if (target === "confirmed" && queuePrint) {
     targetOrder.printStatus = "queued";
     const printerSettings = await getPrintSettings();
     memory.printJobs.push({ id: newOrderId(), orderId: id, status: "queued", attempts: 0, printerId: printerId && printerSettings.printers.some((printer) => printer.id === printerId) ? printerId : printerSettings.selectedPrinterId });

@@ -250,6 +250,7 @@ a { color: inherit; text-decoration: none; }
 .order-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .order-actions button { min-height: 37px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 800; }
 .order-actions .button { padding: 8px; }
+.order-actions .order-print-button { grid-column: 1 / -1; justify-content: center; }
 .secondary-danger { color: #b13a31; background: #ffede9; }
 .menu-management { padding-top: 2px; }
 .hours-status, .integration-chip { display: flex; align-items: center; gap: 5px; color: #837369 !important; font-size: 10px !important; }
@@ -304,12 +305,26 @@ a { color: inherit; text-decoration: none; }
 .print-card b { display: block; font-size: 13px; }
 .print-card p { margin: 4px 0 0; color: #6d6283; font-size: 11px; line-height: 1.35; }
 .print-card code { display: none; padding: 7px; border-radius: 6px; background: white; font-size: 10px; }
+.print-card > a { padding: 8px 10px; border: 1px solid currentColor; border-radius: 8px; color: inherit; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.local-print-card.connected { border-color: #b8dfcc; color: #245d43; background: #edf9f2; }
+.local-print-card.connecting { border-color: #ead7a7; color: #6f5317; background: #fff8e5; }
+.local-print-card.error, .local-print-card.disconnected { border-color: #efc5bf; color: #78362e; background: #fff0ed; }
+.local-print-card.connected p { color: #527364; }
+.local-print-card.connecting p { color: #7e6a40; }
+.local-print-card.error p, .local-print-card.disconnected p { color: #875a54; }
+.local-print-status .dot { width: 7px; height: 7px; }
+.local-print-status.connected .dot { background: #25a56f; }
+.local-print-status.connecting .dot { background: #d99a2b; }
+.local-print-status.error .dot, .local-print-status.disconnected .dot { background: #c64b40; }
 .print-selector { display: grid; gap: 5px; margin-top: 12px; max-width: 360px; }
 .print-selector span { color: #6d5e55; font-size: 10px; font-weight: 800; }
 .print-selector select { min-height: 38px; padding: 0 10px; border: 1px solid #d9d2e9; border-radius: 8px; color: #41365c; background: #fff; font-size: 12px; font-weight: 700; }
 .print-selector select:focus { border-color: var(--brand-red); outline: 2px solid rgba(214,64,44,.15); }
 .print-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 18px; }
 .print-actions .button { min-height: 36px; padding: 8px 11px; font-size: 10px; }
+.print-help { margin: -4px 0 18px; padding: 12px 14px; border-left: 3px solid var(--orange); border-radius: 0 8px 8px 0; background: #fff; }
+.print-help b { font-size: 11px; }
+.print-help p { margin: 3px 0 0; color: #75675e; font-size: 10px; line-height: 1.45; }
 .print-jobs { display: grid; gap: 7px; margin-top: 10px; }
 .print-jobs article { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid #e6ddd7; border-radius: 9px; background: white; }
 .print-jobs article > div { min-width: 0; }
@@ -317,6 +332,10 @@ a { color: inherit; text-decoration: none; }
 .print-jobs b { font-size: 12px; }
 .print-jobs small { margin-top: 2px; color: #897a70; font-size: 10px; }
 .print-jobs .button { min-height: 34px; padding: 7px 9px; font-size: 9px; white-space: nowrap; }
+.legacy-print-settings { margin-top: 18px; border-top: 1px solid #e6ddd7; }
+.legacy-print-settings summary { padding: 15px 0 10px; color: #75675e; cursor: pointer; font-size: 10px; font-weight: 800; }
+.legacy-print-settings .print-card { border-color: #e6ddd7; color: #5f5149; background: #fff; }
+.legacy-print-settings .print-card p { color: #897a70; }
 .print-status { padding: 5px 7px; border-radius: 6px; color: #695e57; background: #eeeae7; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .print-status.printed { color: #176744; background: #e2f6eb; }
 .print-status.dead, .print-status.failed { color: #9d2f25; background: #ffe6e2; }
@@ -353,6 +372,9 @@ a { color: inherit; text-decoration: none; }
   .hours-row > label:not(.closed-toggle) { grid-column: span 1; }
   .print-jobs article { grid-template-columns: minmax(0, 1fr) auto; }
   .print-jobs .button { grid-column: 1 / -1; justify-content: center; }
+  .print-jobs .legacy-print-button { margin-top: -3px; }
+  .print-card { align-items: flex-start; flex-wrap: wrap; }
+  .print-card > a { margin-left: 40px; }
   .default-fee-control, .delivery-override-form { grid-template-columns: 1fr; }
   .default-fee-control > .button, .delivery-override-form > .button { justify-content: center; }
   .delivery-override-row { grid-template-columns: minmax(0, 1fr) 105px 38px; }

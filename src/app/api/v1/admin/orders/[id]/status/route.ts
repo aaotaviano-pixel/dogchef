@@ -10,6 +10,7 @@ const schema = z.object({
   expectedVersion: z.number().int().positive(),
   reason: z.string().trim().max(240).optional(),
   printerId: z.string().trim().min(1).max(60).optional(),
+  queuePrint: z.boolean().optional(),
 });
 
 export async function POST(request: import("next/server").NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -18,7 +19,14 @@ export async function POST(request: import("next/server").NextRequest, context: 
   if (!parsed.success) return apiError("Dados de status inválidos.", 422);
   const { id } = await context.params;
   try {
-    const order = await transitionOrder(id, parsed.data.status, parsed.data.expectedVersion, parsed.data.reason, parsed.data.printerId);
+    const order = await transitionOrder(
+      id,
+      parsed.data.status,
+      parsed.data.expectedVersion,
+      parsed.data.reason,
+      parsed.data.printerId,
+      parsed.data.queuePrint,
+    );
     return NextResponse.json({ order });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Não foi possível atualizar o pedido.";

@@ -36,7 +36,15 @@ import {
 } from "lucide-react";
 
 import { AdminProductEditor } from "@/components/admin-product-editor";
+import {
+  LOCAL_PRINTER_STORAGE_KEY,
+  LocalPrintCoordinator,
+  buildOrderReceiptHtml,
+  buildTestReceiptHtml,
+  shouldUseNativePrintFallback,
+} from "@/lib/local-printing";
 import { formatCurrency } from "@/lib/money";
+import { createBrowserQzAdapter, openNativePrintWindow } from "@/lib/qz-browser";
 import type { Catalog, Order, OrderStatus, PrintSettings, Product, WorkingHour } from "@/lib/types";
 
 type DashboardPayload = {
@@ -50,6 +58,13 @@ type DashboardPayload = {
 
 type AdminPanel = "dashboard" | "orders" | "products" | "showcase" | "settings" | "print";
 type ProductFilter = "all" | "active" | "paused" | "featured";
+type LocalPrintState = {
+  status: "connecting" | "connected" | "disconnected" | "error";
+  printers: string[];
+  selectedPrinter: string;
+  defaultPrinter?: string;
+  message: string;
+};
 
 const labels: Record<OrderStatus, string> = {
   pending_approval: "Novos",
@@ -129,8 +144,64 @@ export function AdminDashboard() {
   const [productFilter, setProductFilter] = useState<ProductFilter>("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [localPrint, setLocalPrint] = useState<LocalPrintState>({
+    status: "connecting",
+    printers: [],
+    selectedPrinter: "",
+    message: "Procurando o QZ Tray neste computador...",
+  });
   const knownNewOrders = useRef(new Set<string>());
   const hasLoaded = useRef(false);
+  const qzClosedHandler = useRef<() => void>(() => undefined);
+  const qzReconnectTimer = useRef<number | undefined>(undefined);
+  const qzReconnectAttempts = useRef(0);
+  const localPrintActions = useRef(new Set<string>());
+  const localPrintCoordinator = useRef<LocalPrintCoordinator | null>(null);
+  if (!localPrintCoordinator.current) {
+    localPrintCoordinator.current = new LocalPrintCoordinator(createBrowserQzAdapter(() => qzClosedHandler.current()));
+  }
+
+  const connectLocalPrinting = useCallback(async (manual = false) => {
+    const coordinator = localPrintCoordinator.current;
+    if (!coordinator) return undefined;
+    setLocalPrint((current) => ({
+      ...current,
+      status: "connecting",
+      message: manual ? "Reconectando ao QZ Tray..." : "Procurando o QZ Tray neste computador...",
+    }));
+    try {
+      const savedPrinter = window.localStorage.getItem(LOCAL_PRINTER_STORAGE_KEY);
+      const result = await coordinator.connectAndDiscover(savedPrinter);
+      if (result.selectedPrinter) window.localStorage.setItem(LOCAL_PRINTER_STORAGE_KEY, result.selectedPrinter);
+      qzReconnectAttempts.current = 0;
+      setLocalPrint({
+        status: "connected",
+        printers: result.printers,
+        selectedPrinter: result.selectedPrinter,
+        defaultPrinter: result.defaultPrinter,
+        message: result.printers.length
+          ? `${result.printers.length} impressora${result.printers.length === 1 ? " encontrada" : "s encontradas"} no Windows.`
+          : "QZ Tray conectado, mas o Windows nao informou impressoras instaladas.",
+      });
+      return result;
+    } catch (connectionError) {
+      const detail = connectionError instanceof Error ? connectionError.message : "QZ Tray nao respondeu.";
+      setLocalPrint((current) => ({
+        ...current,
+        status: "error",
+        message: `QZ Tray indisponivel. Abra ou instale o aplicativo. ${detail}`,
+      }));
+      return undefined;
+    }
+  }, []);
+
+  qzClosedHandler.current = () => {
+    setLocalPrint((current) => ({ ...current, status: "disconnected", message: "A conexao com o QZ Tray foi interrompida." }));
+    if (qzReconnectAttempts.current >= 1) return;
+    qzReconnectAttempts.current += 1;
+    window.clearTimeout(qzReconnectTimer.current);
+    qzReconnectTimer.current = window.setTimeout(() => void connectLocalPrinting(), 2_000);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -195,6 +266,14 @@ export function AdminDashboard() {
     };
   }, [load]);
 
+  useEffect(() => {
+    const initialConnection = window.setTimeout(() => void connectLocalPrinting(), 350);
+    return () => {
+      window.clearTimeout(initialConnection);
+      window.clearTimeout(qzReconnectTimer.current);
+    };
+  }, [connectLocalPrinting]);
+
   async function openNotifications() {
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
       const permission = await Notification.requestPermission();
@@ -231,7 +310,11 @@ export function AdminDashboard() {
       const response = await fetch(`/api/v1/admin/orders/${order.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, expectedVersion: order.version, printerId: status === "confirmed" ? data?.print.selectedPrinterId : undefined }),
+        body: JSON.stringify({
+          status,
+          expectedVersion: order.version,
+          queuePrint: status === "confirmed" ? false : undefined,
+        }),
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Não foi possível atualizar o pedido.");
@@ -351,8 +434,59 @@ export function AdminDashboard() {
     }
   }
 
-  async function reprintOrder(order: Order) {
-    setBusyId(`print-${order.id}`);
+  function saveLocalPrinter(printerName: string) {
+    window.localStorage.setItem(LOCAL_PRINTER_STORAGE_KEY, printerName);
+    console.info("[DogChef Print] PRINTER_SELECTED", { printer: printerName });
+    setLocalPrint((current) => ({ ...current, selectedPrinter: printerName }));
+    setNotice(`Impressora ${printerName} selecionada neste computador.`);
+  }
+
+  function printInBrowser(html: string, title: string) {
+    console.info("[DogChef Print] FALLBACK_REQUESTED", { title });
+    const opened = openNativePrintWindow(html, title);
+    if (!opened) throw new Error("O navegador bloqueou a janela de impressao. Permita pop-ups para o DogChef e tente novamente.");
+  }
+
+  async function printOrderLocally(order: Order) {
+    const jobKey = `order-${order.id}`;
+    if (localPrintActions.current.has(jobKey)) {
+      setNotice(`A impressao do pedido ${order.publicCode} ja esta em andamento.`);
+      return;
+    }
+    localPrintActions.current.add(jobKey);
+    setBusyId(jobKey);
+    try {
+      let selectedPrinter = localPrint.selectedPrinter;
+      if (!localPrintCoordinator.current?.isConnected()) {
+        const connected = await connectLocalPrinting(true);
+        selectedPrinter = connected?.selectedPrinter ?? "";
+      }
+      if (!localPrintCoordinator.current?.isConnected() || !selectedPrinter) {
+        printInBrowser(buildOrderReceiptHtml(order), `DogChef ${order.publicCode}`);
+        setNotice(`QZ Tray indisponivel. Pedido ${order.publicCode} aberto na impressao do navegador.`);
+        return;
+      }
+      await localPrintCoordinator.current.print(jobKey, selectedPrinter, buildOrderReceiptHtml(order));
+      setNotice(`Pedido ${order.publicCode} enviado para ${selectedPrinter}.`);
+    } catch (printError) {
+      if (!shouldUseNativePrintFallback(printError)) {
+        setError(printError instanceof Error ? printError.message : "Nao foi possivel confirmar o envio da impressao.");
+        return;
+      }
+      try {
+        printInBrowser(buildOrderReceiptHtml(order), `DogChef ${order.publicCode}`);
+        setNotice(`A impressao direta falhou; pedido ${order.publicCode} aberto no navegador.`);
+      } catch (fallbackError) {
+        setError(fallbackError instanceof Error ? fallbackError.message : printError instanceof Error ? printError.message : "Nao foi possivel imprimir o pedido.");
+      }
+    } finally {
+      localPrintActions.current.delete(jobKey);
+      setBusyId("");
+    }
+  }
+
+  async function queuePrintOrder(order: Order) {
+    setBusyId(`queue-${order.id}`);
     try {
       const response = await fetch(`/api/v1/admin/orders/${order.id}/print`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ printerId: data?.print.selectedPrinterId }) });
       const result = await response.json();
@@ -402,21 +536,49 @@ export function AdminDashboard() {
   }
 
   async function testSelectedPrinter() {
+    const jobKey = "printer-test";
+    if (localPrintActions.current.has(jobKey)) {
+      setNotice("O teste de impressao ja esta em andamento.");
+      return;
+    }
+    localPrintActions.current.add(jobKey);
     setBusyId("printer-test");
     try {
-      const response = await fetch("/api/v1/admin/settings/printer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectedPrinterId: data?.print.selectedPrinterId }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Não foi possível enviar o teste para a impressora.");
-      setNotice(data?.print.agentConnected ? "Teste enviado para a impressora selecionada." : "Teste colocado na fila. Inicie o agente local para imprimir.");
-      await load();
+      let selectedPrinter = localPrint.selectedPrinter;
+      if (!localPrintCoordinator.current?.isConnected()) {
+        const connected = await connectLocalPrinting(true);
+        selectedPrinter = connected?.selectedPrinter ?? "";
+      }
+      if (!localPrintCoordinator.current?.isConnected() || !selectedPrinter) {
+        printInBrowser(buildTestReceiptHtml("Impressora escolhida no navegador"), "DogChef - Teste");
+        setNotice("QZ Tray indisponivel. O teste foi aberto na impressao do navegador.");
+        return;
+      }
+      await localPrintCoordinator.current.print(jobKey, selectedPrinter, buildTestReceiptHtml(selectedPrinter));
+      setNotice(`Teste enviado para ${selectedPrinter}. Confirme a saida do papel na impressora.`);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Não foi possível testar a impressora.");
+      if (!shouldUseNativePrintFallback(requestError)) {
+        setError(requestError instanceof Error ? requestError.message : "Nao foi possivel confirmar o teste de impressao.");
+        return;
+      }
+      try {
+        printInBrowser(buildTestReceiptHtml(localPrint.selectedPrinter || "Impressora escolhida no navegador"), "DogChef - Teste");
+        setNotice("A impressao QZ falhou; o teste foi aberto no navegador.");
+      } catch (fallbackError) {
+        setError(fallbackError instanceof Error ? fallbackError.message : requestError instanceof Error ? requestError.message : "Nao foi possivel testar a impressora.");
+      }
     } finally {
+      localPrintActions.current.delete(jobKey);
       setBusyId("");
+    }
+  }
+
+  function testBrowserPrint() {
+    try {
+      printInBrowser(buildTestReceiptHtml(localPrint.selectedPrinter || "Impressora escolhida no navegador"), "DogChef - Teste");
+      setNotice("Teste aberto na janela de impressao do navegador.");
+    } catch (printError) {
+      setError(printError instanceof Error ? printError.message : "Nao foi possivel abrir a impressao do navegador.");
     }
   }
 
@@ -529,7 +691,7 @@ export function AdminDashboard() {
   const revenue = data.orders.filter((order) => order.status === "delivered").reduce((sum, order) => sum + order.quote.totalCents, 0);
   const featuredProducts = data.catalog.products.filter((product) => product.featured).sort((left, right) => left.showcaseOrder - right.showcaseOrder);
   const featuredIds = featuredProducts.map((product) => product.id);
-  const printOrders = data.orders.filter((order) => order.printStatus).slice(0, 8);
+  const printOrders = data.orders.filter((order) => !["pending_approval", "cancelled"].includes(order.status)).slice(0, 8);
   const normalizedSearch = productSearch.trim().toLocaleLowerCase("pt-BR");
   const filteredProducts = data.catalog.products.filter((product) => {
     const matchesSearch = !normalizedSearch || `${product.name} ${product.description}`.toLocaleLowerCase("pt-BR").includes(normalizedSearch);
@@ -552,7 +714,7 @@ export function AdminDashboard() {
       <div className="order-customer"><b>{order.customer.name}</b><small>{order.deliveryType === "delivery" ? `Entrega · ${order.customer.address?.neighborhood || "endereço pendente"}` : "Retirada no balcão"}</small></div>
       <ul>{order.quote.items.map((item, index) => <li key={`${item.productId}-${index}`}><b>{item.quantity}×</b><span>{item.productName}{item.optionals.length > 0 && <small>{item.optionals.map((option) => option.name).join(", ")}</small>}{item.note && <small>Obs.: {item.note}</small>}</span></li>)}</ul>
       <footer><strong>{formatCurrency(order.quote.totalCents)}</strong><small>{order.paymentMethod === "pix" ? `Pix · ${order.paymentStatus}` : order.paymentMethod === "cash" ? "Dinheiro" : "Cartão"}</small></footer>
-      <div className="order-actions">{nextActions[order.status]?.filter((action) => order.deliveryType === "delivery" || action.status !== "out_for_delivery").map((action) => { const Icon = action.icon; return <button key={action.status} disabled={busyId === order.id} className={action.status === "cancelled" ? "secondary-danger" : "button button-dark"} onClick={() => void updateStatus(order, action.status)}><Icon size={16}/>{action.label}</button>; })}</div>
+      <div className="order-actions">{nextActions[order.status]?.filter((action) => order.deliveryType === "delivery" || action.status !== "out_for_delivery").map((action) => { const Icon = action.icon; return <button key={action.status} disabled={busyId === order.id} className={action.status === "cancelled" ? "secondary-danger" : "button button-dark"} onClick={() => void updateStatus(order, action.status)}><Icon size={16}/>{action.label}</button>; })}{!["pending_approval", "cancelled"].includes(order.status) && <button className="button button-ghost order-print-button" disabled={busyId === `order-${order.id}`} onClick={() => void printOrderLocally(order)}><Printer size={15}/>{busyId === `order-${order.id}` ? "Enviando..." : "Imprimir"}</button>}</div>
     </article>;
   }
 
@@ -628,10 +790,12 @@ export function AdminDashboard() {
         </section>}
 
         {activePanel === "print" && <section className="admin-panel-view admin-section print-section">
-          <div className="section-heading"><div><p className="eyebrow">Impressão térmica</p><h2>Escolha onde imprimir</h2></div><span className="integration-chip"><Printer size={15}/>{data.print.agentConnected ? "Windows conectado" : "agente local"}</span></div>
-          <div className="print-card"><Printer size={26}/><div><b>Impressora dos próximos pedidos</b><p>{data.print.agentConnected ? `O Windows informou ${data.print.printers.length} impressora${data.print.printers.length === 1 ? " instalada" : "s instaladas"} neste computador. A impressora padrão é escolhida automaticamente.` : "Dê dois cliques em Instalar-Impressao-DogChef.cmd no computador da cozinha para reconhecer automaticamente as impressoras instaladas no Windows."}</p><label className="print-selector"><span>Imprimir em</span><select value={data.print.selectedPrinterId} disabled={busyId === "printer"} onChange={(event) => void saveSelectedPrinter(event.target.value)}>{data.print.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}{printer.isDefault ? " · padrão automático" : ""}{printer.status === "offline" ? " · offline" : ""}</option>)}</select></label></div><code>Instalar-Impressao-DogChef.cmd</code></div>
-          <div className="print-actions"><button className="button button-dark" disabled={busyId === "printer-test"} onClick={() => void testSelectedPrinter()}><Printer size={15}/>{busyId === "printer-test" ? "Enviando..." : "Testar impressão"}</button><button className="button button-ghost" disabled={busyId === "printer-refresh"} onClick={() => void refreshPrinterState()}><RefreshCw size={15}/>Atualizar impressoras</button><button className="button button-ghost" disabled={busyId === "printer-refresh"} onClick={() => void refreshPrinterState(data.print.agentConnected ? "Agente local conectado e lista recebida do Windows." : "Agente local não conectado. Abra o serviço na máquina da cozinha.")}><CircleAlert size={15}/>Diagnosticar</button></div>
-          {printOrders.length > 0 && <div className="print-jobs">{printOrders.map((order) => <article key={order.id}><div><b>{order.publicCode}</b><small>{order.customer.name}</small></div><span className={`print-status ${order.printStatus}`}>{printLabels[order.printStatus!]}</span><button className="button button-dark" disabled={busyId === `print-${order.id}`} onClick={() => void reprintOrder(order)}><Printer size={14}/>{order.printStatus === "printed" ? "Reimprimir" : "Tentar novamente"}</button></article>)}</div>}
+          <div className="section-heading"><div><p className="eyebrow">Impressao neste computador</p><h2>Escolha onde imprimir</h2></div><span className={`integration-chip local-print-status ${localPrint.status}`}><span className="dot"/>{localPrint.status === "connected" ? "QZ conectado" : localPrint.status === "connecting" ? "Conectando" : "QZ desconectado"}</span></div>
+          <div className={`print-card local-print-card ${localPrint.status}`}><Printer size={26}/><div><b>Impressora do Windows</b><p>{localPrint.message}</p><label className="print-selector"><span>Imprimir em</span><select value={localPrint.selectedPrinter} disabled={localPrint.status !== "connected" || localPrint.printers.length === 0} onChange={(event) => saveLocalPrinter(event.target.value)}><option value="">Selecione uma impressora</option>{localPrint.printers.map((printer) => <option key={printer} value={printer}>{printer}{printer === localPrint.defaultPrinter ? " · padrao do Windows" : ""}</option>)}</select></label></div><a href="https://qz.io/download/" target="_blank" rel="noreferrer">Instalar QZ Tray</a></div>
+          <div className="print-actions"><button className="button button-dark" disabled={busyId === "printer-test"} onClick={() => void testSelectedPrinter()}><Printer size={15}/>{busyId === "printer-test" ? "Enviando..." : "Testar impressao"}</button><button className="button button-ghost" disabled={localPrint.status === "connecting"} onClick={() => void connectLocalPrinting(true)}><RefreshCw size={15}/>Reconectar</button><button className="button button-ghost" onClick={testBrowserPrint}><ExternalLink size={15}/>Imprimir pelo navegador</button></div>
+          <div className="print-help"><b>Como funciona</b><p>Instale e deixe o QZ Tray aberto. Impressoras USB ou de rede ja instaladas no Windows aparecem automaticamente. Na primeira conexao, permita o acesso do DogChef e marque para lembrar.</p></div>
+          {printOrders.length > 0 && <div className="print-jobs">{printOrders.map((order) => <article key={order.id}><div><b>{order.publicCode}</b><small>{order.customer.name} · {order.printStatus ? `fila legada: ${printLabels[order.printStatus]}` : "pronto para impressao local"}</small></div><button className="button button-dark" disabled={busyId === `order-${order.id}`} onClick={() => void printOrderLocally(order)}><Printer size={14}/>{busyId === `order-${order.id}` ? "Enviando..." : "Imprimir agora"}</button><button className="button button-ghost legacy-print-button" disabled={busyId === `queue-${order.id}`} onClick={() => void queuePrintOrder(order)}><RefreshCw size={14}/>Fila do agente</button></article>)}</div>}
+          <details className="legacy-print-settings"><summary>Compatibilidade com o agente antigo</summary><div className="print-card"><Printer size={22}/><div><b>{data.print.agentConnected ? "Agente DogChef conectado" : "Agente DogChef desconectado"}</b><p>Esta fila permanece disponivel para instalacoes que ja usam o servico antigo.</p><label className="print-selector"><span>Impressora do agente</span><select value={data.print.selectedPrinterId} disabled={busyId === "printer"} onChange={(event) => void saveSelectedPrinter(event.target.value)}>{data.print.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}{printer.isDefault ? " · padrao" : ""}</option>)}</select></label></div></div><div className="print-actions"><button className="button button-ghost" disabled={busyId === "printer-refresh"} onClick={() => void refreshPrinterState()}><RefreshCw size={15}/>Atualizar agente</button></div></details>
         </section>}
       </section>
 

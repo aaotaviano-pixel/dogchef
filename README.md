@@ -242,7 +242,23 @@ Troque a senha administrativa e a chave de sessão caso sejam expostas. Não com
 
 O storefront usa o tema claro por padrão, com a identidade visual do Dog do Chef em creme, vermelho, mostarda e verde. Para testar temporariamente a versão escura, defina `NEXT_PUBLIC_DOGCHEF_DARK_PREVIEW=true` no ambiente desejado.
 
-## Agente local ESC/POS
+## Impressao local com QZ Tray (recomendada)
+
+O painel publicado na Vercel imprime nas filas do Windows por meio do **QZ Tray 2.2.6**, executado no computador da loja. A comunicacao e navegador -> WebSocket local seguro -> QZ Tray -> spooler do Windows; a Vercel nunca tenta acessar USB, IP ou rede local.
+
+1. Instale a impressora e confirme uma pagina de teste no Windows.
+2. Instale o [QZ Tray](https://qz.io/download/) ou execute `Instalar-QZ-DogChef.cmd` com dois cliques.
+3. Deixe o QZ Tray aberto e acesse `/admin` -> **Impressao**.
+4. Na primeira conexao, permita o acesso do DogChef e marque a opcao para lembrar.
+5. Escolha uma fila real e clique em **Testar impressao**.
+
+Impressoras USB e de rede aparecem automaticamente quando ja estao instaladas no Windows. A escolha fica no `localStorage` do dominio e, portanto, pertence somente ao computador usado. O painel tenta uma reconexao curta, nunca fica carregando indefinidamente e oferece **Imprimir pelo navegador** por um iframe temporario quando QZ nao estiver disponivel. Pedidos sao salvos antes da impressao; falha de papel, driver ou QZ nao apaga nem bloqueia o pedido. Um timeout de envio nao abre outra via automaticamente, pois o resultado pode ser incerto e uma segunda tentativa imediata poderia duplicar o papel.
+
+Sem certificado comercial/confiavel do QZ, o Windows/QZ pode solicitar confirmacao antes de imprimir. O projeto nao possui nem simula uma chave privada. Impressao silenciosa so deve ser ativada futuramente com certificado real e assinatura feita no servidor; a chave privada nunca pode ir para o frontend.
+
+Consulte o passo a passo, matriz de testes e solucao de problemas em [Manual de Impressao](MANUAL_IMPRESSAO_DOGCHEF.md).
+
+## Agente local ESC/POS (compatibilidade)
 
 Para a operacao diaria, consulte tambem o [Manual de Impressao](MANUAL_IMPRESSAO_DOGCHEF.md).
 
@@ -301,9 +317,10 @@ local nem expõe a impressora na internet. Para remover a tarefa:
 powershell -ExecutionPolicy Bypass -File .\agent\uninstall-windows.ps1
 ```
 
-O painel administrativo também oferece **Testar impressão**, que cria somente um trabalho
-de diagnóstico na fila, sem criar pedido falso. O pedido continua independente da fila:
-se a impressora estiver desligada, o pedido permanece salvo e pode ser reimpresso depois.
+O painel mantem esta fila antiga em **Compatibilidade com o agente antigo**. O botao principal
+**Testar impressao** usa QZ Tray neste computador; a confirmacao do pedido nao cria uma fila
+legada automaticamente. A fila do agente continua disponivel por acao explicita para
+instalacoes existentes, sem migrations ou remocao de dados.
 
 O agente não abre servidor HTTP/WS local e não depende de CORS ou mixed content: ele faz
 polling autenticado HTTPS para a Vercel e a conexão com USB, spooler, TCP ou IPP parte
@@ -328,9 +345,10 @@ Cliente (Next.js) ──> API Routes ──> Supabase
                        │              └─ fila de impressão
                        ├─ Mercado Pago (Pix + webhook assinado)
                        ├─ Avisos no site e no navegador (sem mensageria paga)
-                       └─ Agente local ──> impressora ESC/POS
+                       └─ Agente local legado ──> impressora ESC/POS
 
 Admin (/admin) ──────> API Routes protegidas por sessão
+      └─ navegador ──> QZ Tray localhost ──> spooler do Windows ──> impressora
 ```
 
 O servidor é responsável por preço, disponibilidade, regras de entrega, transição de status, autenticação administrativa e segredos. O navegador apenas consome as rotas da aplicação.
