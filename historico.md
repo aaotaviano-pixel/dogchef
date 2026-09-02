@@ -1,5 +1,15 @@
 # Historico do DogChef
 
+## 2026-09-01 — HTTPS e endurecimento de seguranca
+
+- Confirmado o redirecionamento permanente HTTP para HTTPS na borda da Vercel.
+- Adicionados HSTS, CSP, protecao contra iframe, MIME sniffing e vazamento de referrer.
+- Restringidas camera, microfone, geolocalizacao, pagamento e USB pelo navegador.
+- Mantidas apenas as conexoes externas exigidas pelo Supabase e pelo QZ Tray local.
+- Rotas administrativas, de autenticacao, pedidos e impressao passaram a usar `no-store` e `noindex`.
+- O painel administrativo tambem recebeu metadados para impedir indexacao e cache por buscadores.
+- Criados testes automatizados para prevenir regressao dos headers de seguranca.
+
 ## 2026-08-02 — Diferenciacao visual da vitrine
 
 - Adicionada diferenciacao tonal dos cards por categoria usando apenas CSS.
