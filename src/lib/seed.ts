@@ -21,7 +21,11 @@ export const categories: Category[] = [
   { id: "bebidas", name: "Bebidas", description: "Geladas e naturais", sortOrder: 6 },
 ];
 
-const productDefinitions: Array<Omit<Product, "imageUrl" | "images" | "showcaseOrder">> = [
+type ProductDefinition = Omit<Product, "imageUrl" | "images" | "showcaseOrder" | "featured" | "inShowcase"> & {
+  featured?: boolean;
+};
+
+const productDefinitions: ProductDefinition[] = [
   {
     id: "tradicional-hot-dog-tradicional",
     categoryId: "tradicionais",
@@ -380,7 +384,7 @@ const productDefinitions: Array<Omit<Product, "imageUrl" | "images" | "showcaseO
   },
 ];
 
-function imageForProduct(product: Omit<Product, "imageUrl" | "images" | "showcaseOrder">) {
+function imageForProduct(product: ProductDefinition) {
   if (product.categoryId === "dog-no-pote") return "/images/dogchef/dog-no-pote.webp";
   if (product.categoryId === "porcoes") return "/images/dogchef/batata-completa.webp";
   if (product.categoryId === "bebidas") return "/images/dogchef/bebidas.webp";
@@ -399,6 +403,8 @@ export const products: Product[] = productDefinitions.map((product) => ({
   ...product,
   imageUrl: imageForProduct(product),
   images: [{ id: `seed-${product.id}`, url: imageForProduct(product), isMain: true, sortOrder: 0 }],
+  featured: Boolean(product.featured),
+  inShowcase: Boolean(product.featured),
   showcaseOrder: product.featured ? productDefinitions.filter((candidate) => candidate.featured).findIndex((candidate) => candidate.id === product.id) : 0,
 }));
 

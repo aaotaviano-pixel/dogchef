@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildCategoryMarqueeItems, buildCategoryTiles, selectShowcaseProducts } from "./storefront-presentation";
+import { buildCategoryMarqueeItems, buildCategoryTiles, selectFeaturedProducts, selectShowcaseProducts } from "./storefront-presentation";
 import type { Category, Product } from "./types";
 
 function product(overrides: Partial<Product> & Pick<Product, "id" | "categoryId" | "name">): Product {
@@ -13,6 +13,7 @@ function product(overrides: Partial<Product> & Pick<Product, "id" | "categoryId"
     images: [],
     isAvailable: true,
     featured: false,
+    inShowcase: false,
     showcaseOrder: 0,
     prepMinutes: 15,
     optionGroups: [],
@@ -20,15 +21,25 @@ function product(overrides: Partial<Product> & Pick<Product, "id" | "categoryId"
   };
 }
 
-test("selectShowcaseProducts keeps only available featured products in admin order", () => {
+test("selectShowcaseProducts keeps only available banner products in admin order", () => {
   const products = [
-    product({ id: "later", categoryId: "dogs", name: "Later", featured: true, showcaseOrder: 3 }),
-    product({ id: "hidden", categoryId: "dogs", name: "Hidden", featured: true, showcaseOrder: 1, isAvailable: false }),
-    product({ id: "first", categoryId: "dogs", name: "First", featured: true, showcaseOrder: 1 }),
+    product({ id: "later", categoryId: "dogs", name: "Later", inShowcase: true, showcaseOrder: 3 }),
+    product({ id: "hidden", categoryId: "dogs", name: "Hidden", inShowcase: true, showcaseOrder: 1, isAvailable: false }),
+    product({ id: "first", categoryId: "dogs", name: "First", inShowcase: true, showcaseOrder: 1 }),
     product({ id: "regular", categoryId: "dogs", name: "Regular" }),
   ];
 
   assert.deepEqual(selectShowcaseProducts(products).map((item) => item.id), ["first", "later"]);
+});
+
+test("selectFeaturedProducts returns only available products explicitly marked as featured", () => {
+  const products = [
+    product({ id: "featured", categoryId: "dogs", name: "Featured", featured: true }),
+    product({ id: "regular", categoryId: "dogs", name: "Regular" }),
+    product({ id: "paused", categoryId: "dogs", name: "Paused", featured: true, isAvailable: false }),
+  ];
+
+  assert.deepEqual(selectFeaturedProducts(products).map((item) => item.id), ["featured"]);
 });
 
 test("selectShowcaseProducts falls back to available catalog products", () => {

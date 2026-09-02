@@ -63,7 +63,14 @@ function normalizeLocalProduct(product: Product): Product {
   const images = Array.isArray(product.images) && product.images.length
     ? product.images
     : [{ id: `seed-${product.id}`, url: imageUrl, isMain: true, sortOrder: 0 }];
-  return { ...product, imageUrl, images, showcaseOrder: Number(product.showcaseOrder ?? 0) };
+  return {
+    ...product,
+    imageUrl,
+    images,
+    featured: Boolean(product.featured),
+    inShowcase: Boolean(product.inShowcase ?? product.featured),
+    showcaseOrder: Number(product.showcaseOrder ?? 0),
+  };
 }
 
 async function ensureLocalCatalogLoaded() {
@@ -162,7 +169,7 @@ export async function getCatalog(): Promise<Catalog> {
 
   const [categoriesResult, productsResult, imagesResult, zonesResult, settingsResult, hoursResult, groupsResult, linksResult, optionsResult] = await Promise.all([
     db.from("menu_categories").select("id, name, description, sort_order").eq("is_available", true).order("sort_order"),
-    db.from("products").select("*").order("sort_order"),
+    db.from("products").select("id, category_id, name, description, price_cents, emoji, image_url, is_available, featured, highlight, in_showcase, showcase_order, prep_minutes, sort_order").order("sort_order"),
     db.from("product_images").select("id, product_id, public_url, is_main, sort_order").order("sort_order"),
     db.from("delivery_zones").select("id, name, aliases, fee_cents, minimum_order_cents, is_available").eq("is_available", true).order("name"),
     db.from("store_settings").select("accepting_orders, default_delivery_fee_cents").eq("id", true).maybeSingle(),
@@ -253,6 +260,7 @@ export async function getCatalog(): Promise<Catalog> {
         isAvailable: Boolean(product.is_available),
         featured: Boolean(product.featured),
         highlight: String(product.highlight || menuHighlight(id) || "") || undefined,
+        inShowcase: Boolean(product.in_showcase),
         showcaseOrder: Number(product.showcase_order ?? product.sort_order ?? 0),
         prepMinutes: Number(product.prep_minutes ?? 20),
         optionGroups: groupsByProduct.get(id) ?? [],
@@ -996,12 +1004,9 @@ function productIdFor(name: string) {
   return `${slug}-${randomUUID().slice(0, 8)}`;
 }
 
-async function assertProductInput(input: ProductInput, currentId?: string) {
+async function assertProductInput(input: ProductInput) {
   const catalog = await getCatalog();
   if (!catalog.categories.some((category) => category.id === input.categoryId)) throw new Error("Selecione uma categoria válida.");
-  if (input.featured && !catalog.products.some((product) => product.id === currentId && product.featured)) {
-    if (catalog.products.filter((product) => product.featured).length >= 5) throw new Error("O showcase aceita no máximo 5 produtos.");
-  }
 }
 
 export async function createProduct(input: ProductInput) {
@@ -1022,7 +1027,6 @@ export async function createProduct(input: ProductInput) {
       is_available: input.isAvailable,
       featured: input.featured,
       highlight: input.highlight?.trim() || null,
-      showcase_order: input.featured ? 99 : 0,
       prep_minutes: input.prepMinutes,
       sort_order: Number(lastProduct?.sort_order ?? 0) + 1,
     });
@@ -1041,7 +1045,8 @@ export async function createProduct(input: ProductInput) {
       isAvailable: input.isAvailable,
       featured: input.featured,
       highlight: input.highlight?.trim() || undefined,
-      showcaseOrder: input.featured ? 99 : 0,
+      inShowcase: false,
+      showcaseOrder: 0,
       prepMinutes: input.prepMinutes,
       optionGroups: [],
     });
@@ -1053,7 +1058,7 @@ export async function createProduct(input: ProductInput) {
 }
 
 export async function updateProduct(id: string, input: ProductInput) {
-  await assertProductInput(input, id);
+  await assertProductInput(input);
   const db = getSupabase();
   if (db) {
     const { data, error } = await db.from("products").update({
@@ -1251,13 +1256,13 @@ export async function updateShowcaseProducts(productIds: string[]) {
       // Keep older Supabase functions usable until the filtered migration is applied.
       const { error: clearError } = await db
         .from("products")
-        .update({ featured: false, showcase_order: 0 })
-        .eq("featured", true);
+        .update({ in_showcase: false, showcase_order: 0 })
+        .eq("in_showcase", true);
       if (clearError) throw new Error("Não foi possível salvar o showcase. A migration do banco ou as permissões ainda precisam ser atualizadas.");
 
       const updates = await Promise.all(productIds.map((id, index) => db
         .from("products")
-        .update({ featured: true, showcase_order: index })
+        .update({ in_showcase: true, showcase_order: index })
         .eq("id", id)));
       if (updates.some((result) => result.error)) throw new Error("Não foi possível concluir a atualização do showcase. Verifique a migration do banco.");
     }
@@ -1265,7 +1270,7 @@ export async function updateShowcaseProducts(productIds: string[]) {
     await ensureLocalCatalogLoaded();
     products.forEach((product) => {
       const index = productIds.indexOf(product.id);
-      product.featured = index >= 0;
+      product.inShowcase = index >= 0;
       product.showcaseOrder = index >= 0 ? index : 0;
     });
     await persistLocalCatalog();
@@ -1278,26 +1283,15 @@ export async function updateProductSettings(id: string, update: ProductSettingsU
   if (db) {
     const { data: storedProduct, error: productError } = await db
       .from("products")
-      .select("id, featured")
+      .select("id")
       .eq("id", id)
       .maybeSingle();
     if (productError) throw new Error("Não foi possível consultar o produto.");
     if (!storedProduct) throw new Error("Produto não encontrado.");
 
-    if (update.featured === true && !storedProduct.featured) {
-      const { count, error: countError } = await db
-        .from("products")
-        .select("id", { count: "exact", head: true })
-        .eq("featured", true);
-      if (countError) throw new Error("Não foi possível consultar os destaques do banner.");
-      if ((count ?? 0) >= 5) throw new Error("O banner aceita no máximo 5 produtos.");
-    }
-    const payload: Record<string, boolean | number> = {};
+    const payload: Record<string, boolean> = {};
     if (typeof update.isAvailable === "boolean") payload.is_available = update.isAvailable;
-    if (typeof update.featured === "boolean") {
-      payload.featured = update.featured;
-      if (update.featured) payload.showcase_order = 99;
-    }
+    if (typeof update.featured === "boolean") payload.featured = update.featured;
     const { error } = await db.from("products").update(payload).eq("id", id);
     if (error) throw new Error("Não foi possível atualizar o produto.");
     const product = (await getCatalog()).products.find((candidate) => candidate.id === id);
@@ -1307,12 +1301,8 @@ export async function updateProductSettings(id: string, update: ProductSettingsU
   await ensureLocalCatalogLoaded();
   const product = products.find((candidate) => candidate.id === id);
   if (!product) throw new Error("Produto não encontrado.");
-  if (update.featured === true && !product.featured && products.filter((item) => item.featured).length >= 5) throw new Error("O banner aceita no máximo 5 produtos.");
   if (typeof update.isAvailable === "boolean") product.isAvailable = update.isAvailable;
-  if (typeof update.featured === "boolean") {
-    product.featured = update.featured;
-    if (update.featured) product.showcaseOrder = 99;
-  }
+  if (typeof update.featured === "boolean") product.featured = update.featured;
   await persistLocalCatalog();
   return product;
 }

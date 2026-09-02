@@ -14,14 +14,18 @@ export type StorefrontCategoryMarqueeItem = StorefrontCategoryTile & {
 };
 
 export function selectShowcaseProducts(products: Product[], limit = 5) {
-  const featured = products
-    .filter((product) => product.featured && product.isAvailable)
+  const selected = products
+    .filter((product) => product.inShowcase && product.isAvailable)
     .sort((left, right) => left.showcaseOrder - right.showcaseOrder)
     .slice(0, limit);
 
-  return featured.length
-    ? featured
+  return selected.length
+    ? selected
     : products.filter((product) => product.isAvailable).slice(0, limit);
+}
+
+export function selectFeaturedProducts(products: Product[]) {
+  return products.filter((product) => product.featured && product.isAvailable);
 }
 
 export function buildCategoryTiles(categories: Category[], products: Product[]): StorefrontCategoryTile[] {

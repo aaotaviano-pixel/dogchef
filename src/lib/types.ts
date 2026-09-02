@@ -70,8 +70,9 @@ export type Product = {
   imageUrl: string;
   images: ProductImage[];
   isAvailable: boolean;
-  featured?: boolean;
+  featured: boolean;
   highlight?: string;
+  inShowcase: boolean;
   showcaseOrder: number;
   prepMinutes: number;
   optionGroups: OptionGroup[];
