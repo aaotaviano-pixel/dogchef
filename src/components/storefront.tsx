@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/money";
 import { CustomerAccess } from "@/components/customer-access";
 import { InstagramLogo, WhatsAppLogo } from "@/components/social-icons";
-import { buildCategoryMarqueeItems, buildCategoryTiles, selectShowcaseProducts } from "@/lib/storefront-presentation";
+import { buildCategoryMarqueeItems, buildCategoryTiles, selectFeaturedProducts, selectShowcaseProducts } from "@/lib/storefront-presentation";
 import type { CartLine, Catalog, CheckoutInput, CustomerAccount, Product } from "@/lib/types";
 
 const emptyCatalog: Catalog = {
@@ -89,9 +89,9 @@ export function Storefront() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroHeadlineIndex, setHeroHeadlineIndex] = useState(0);
   const showcaseProducts = useMemo(() => selectShowcaseProducts(catalog.products), [catalog.products]);
+  const featuredProducts = useMemo(() => selectFeaturedProducts(catalog.products), [catalog.products]);
   const heroProduct = showcaseProducts.length ? showcaseProducts[heroIndex % showcaseProducts.length] : null;
   const heroHeadline = HERO_HEADLINES[heroHeadlineIndex % HERO_HEADLINES.length];
-  const featuredProducts = showcaseProducts.slice(0, 4);
   const categoryTiles = useMemo(() => buildCategoryTiles(catalog.categories, catalog.products), [catalog.categories, catalog.products]);
   const categoryMarqueeItems = useMemo(() => buildCategoryMarqueeItems(categoryTiles), [categoryTiles]);
 
@@ -106,7 +106,7 @@ export function Storefront() {
         window.history.replaceState({}, "", `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
       }
     }, 0);
-    fetch("/api/v1/menu")
+    fetch("/api/v1/menu", { cache: "no-store" })
       .then((response) => response.json())
       .then((data: Catalog) => setCatalog(data))
       .catch(() => setFormError("Não conseguimos carregar o cardápio. Atualize a página para tentar novamente."))
@@ -427,7 +427,7 @@ export function Storefront() {
       </section>}
       {featuredProducts.length > 0 && <section className="featured-section featured-band menu-reveal menu-reveal--title" id="destaques" aria-labelledby="featured-title">
         <div className="featured-section-inner">
-          <header className="section-heading"><div><p className="eyebrow">Selecionados no Showcase</p><h2 id="featured-title">Destaques da casa</h2></div><a href="#dogchef-menu-list">Ver cardápio completo <ChevronRight size={16}/></a></header>
+          <header className="section-heading"><div><p className="eyebrow">Selecionados pela casa</p><h2 id="featured-title">Destaques da casa</h2></div><a href="#dogchef-menu-list">Ver cardápio completo <ChevronRight size={16}/></a></header>
           <div className="featured-grid">{featuredProducts.map((product) => { const visual = productVisualTreatment(product); return <article key={product.id} className={`featured-card featured-card--${product.categoryId} featured-card--visual-${visual.tone} menu-reveal`}>
             <button className="featured-card-media" onClick={() => openProduct(product)} aria-label={`Ver ${product.name}`}><Image src={product.imageUrl} alt={product.name} fill sizes="(max-width: 619px) 50vw, (max-width: 1023px) 33vw, 260px"/><span className="featured-visual-badge" aria-hidden="true">{visual.label}</span></button>
             <div><small>{product.highlight || "Destaque"}</small><h3>{product.name}</h3><p>{product.description}</p><footer><strong>{formatCurrency(product.priceCents)}</strong><button className="round-add" onClick={() => openProduct(product)} aria-label={`Adicionar ${product.name}`}><Plus size={17}/></button></footer></div>

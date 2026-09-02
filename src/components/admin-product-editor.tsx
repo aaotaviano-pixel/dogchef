@@ -172,7 +172,7 @@ export function AdminProductEditor({ product, categories, onClose, onSaved }: Pr
                 <div className="editor-section-title"><strong>Visibilidade</strong><small>Controle onde o produto aparece.</small></div>
                 <div className="editor-toggles">
                   <label><input type="checkbox" checked={isAvailable} onChange={(event) => setIsAvailable(event.target.checked)}/><span><b>Produto ativo</b><small>Disponível para compra no cardápio</small></span></label>
-                  <label><input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)}/><span><b>Exibir no showcase</b><small>Usa a foto principal no banner da home</small></span></label>
+                  <label><input type="checkbox" checked={featured} onChange={(event) => setFeatured(event.target.checked)}/><span><b>Produto em destaque</b><small>Exibir na seção Destaques da casa</small></span></label>
                 </div>
               </section>
             </div>
