@@ -4,6 +4,7 @@ import { checkoutSchema } from "@/lib/checkout";
 import { customerIdFromRequest } from "@/lib/customer-auth";
 import { createPixPayment } from "@/lib/integrations/mercado-pago";
 import { apiError } from "@/lib/http";
+import { buildTrackingUrl } from "@/lib/order-tracking";
 import { createOrder, getCustomerAccount, savePixPayment, updatePaymentStatus } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
       {
         order,
         trackingToken,
-        trackingUrl: `/pedido/${order.publicCode}`,
+        trackingUrl: buildTrackingUrl(order.publicCode, trackingToken),
         paymentError,
       },
       { status: 201, headers: { "Cache-Control": "no-store" } },
