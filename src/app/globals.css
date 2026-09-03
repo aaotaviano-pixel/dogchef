@@ -980,6 +980,7 @@ a { color: inherit; text-decoration: none; }
 .customer-notice span { flex: 1; }
 .customer-notice button { display: grid; width: 26px; height: 26px; place-items: center; border: 0; color: inherit; background: transparent; }
 .tracker-notice { margin: -10px 0 20px; }
+.tracker-sync-warning { margin: -10px 0 20px; padding: 10px 12px; border-radius: 8px; color: #75510b; background: #fff2c9; font-size: 11px; font-weight: 700; line-height: 1.4; text-align: left; }
 .complete-profile { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto; align-items: end; gap: 12px; margin-bottom: 14px; padding: 14px; border: 1px solid #ead8a6; border-radius: 8px; background: #fff9e8; }
 .complete-profile > div b, .complete-profile > div small { display: block; }
 .complete-profile > div b { font-size: 12px; }
