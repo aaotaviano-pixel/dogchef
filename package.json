@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx --test agent/ipp.test.ts agent/windows-printers.test.ts src/lib/local-printing.test.ts src/lib/printers.test.ts src/lib/security.test.ts src/lib/storefront-presentation.test.ts",
+    "test": "tsx --test agent/ipp.test.ts agent/windows-printers.test.ts src/lib/local-printing.test.ts src/lib/order-tracking.test.ts src/lib/printers.test.ts src/lib/security.test.ts src/lib/storefront-presentation.test.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "print-agent": "tsx agent/index.ts",
