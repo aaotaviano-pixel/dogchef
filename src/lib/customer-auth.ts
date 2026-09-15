@@ -11,9 +11,12 @@ const COOKIE_NAME = "dogchef_customer";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 let localSessionSecret: string | undefined;
 
+const customerPhoneSchema = z.string().trim().max(20).transform((phone) => phone.replace(/\D/g, ""))
+  .refine((phone) => /^(?:55)?[1-9][0-9]{9,10}$/.test(phone), "Informe um telefone válido com DDD.");
+
 export const customerRegistrationSchema = z.object({
   name: z.string().trim().min(2, "Informe seu nome.").max(80),
-  phone: z.string().trim().min(10, "Informe um telefone válido.").max(20),
+  phone: customerPhoneSchema,
   email: z.string().trim().toLowerCase().email("Informe um e-mail válido.").max(120),
   password: z.string().min(8, "A senha precisa ter pelo menos 8 caracteres.").max(72),
 });
@@ -33,7 +36,7 @@ export const customerPasswordUpdateSchema = z.object({
 });
 
 export const customerProfileSchema = z.object({
-  phone: z.string().trim().min(10, "Informe um telefone válido.").max(20),
+  phone: customerPhoneSchema,
 });
 
 function sessionSecret() {

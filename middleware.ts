@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-type PolicyName = "publicRead" | "auth" | "orderCreate" | "write";
+type PolicyName = "publicRead" | "auth" | "adminAuth" | "registration" | "orderCreate" | "write";
 
 type Policy = {
   name: PolicyName;
@@ -12,6 +12,8 @@ type Policy = {
 
 const PUBLIC_READ_POLICY: Policy = { name: "publicRead", limit: 60, window: "1 m" };
 const AUTH_POLICY: Policy = { name: "auth", limit: 5, window: "1 m" };
+const ADMIN_AUTH_POLICY: Policy = { name: "adminAuth", limit: 5, window: "1 m" };
+const REGISTRATION_POLICY: Policy = { name: "registration", limit: 5, window: "1 m" };
 const ORDER_POLICY: Policy = { name: "orderCreate", limit: 10, window: "1 m" };
 const WRITE_POLICY: Policy = { name: "write", limit: 30, window: "1 m" };
 
@@ -44,6 +46,8 @@ const limiters = redis
         prefix: "dogchef:ratelimit:auth",
         timeout: 1000,
       }),
+      adminAuth: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(5, "1 m"), prefix: "dogchef:ratelimit:admin-auth", timeout: 1000 }),
+      registration: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(5, "1 m"), prefix: "dogchef:ratelimit:registration-burst", timeout: 1000 }),
       orderCreate: new Ratelimit({
         redis,
         limiter: Ratelimit.slidingWindow(ORDER_POLICY.limit, ORDER_POLICY.window),
@@ -77,6 +81,9 @@ function validIp(value: string | null) {
 }
 
 function clientIp(request: NextRequest) {
+  if (process.env.VERCEL === "1") {
+    return validIp((request.headers.get("x-vercel-forwarded-for") || request.headers.get("x-forwarded-for"))?.split(",")[0] ?? null) || "unknown";
+  }
   const realIp = validIp(request.headers.get("x-real-ip"));
   if (realIp) return realIp;
 
@@ -93,6 +100,8 @@ function policyFor(request: NextRequest): Policy | null {
   const pathname = request.nextUrl.pathname;
   if (!pathname.startsWith("/api/v1/") || request.method === "OPTIONS") return null;
 
+  if (request.method === "POST" && pathname === "/api/v1/admin/login") return ADMIN_AUTH_POLICY;
+  if (request.method === "POST" && pathname === "/api/v1/customer/register") return REGISTRATION_POLICY;
   if (request.method === "POST" && AUTH_PATHS.has(pathname)) return AUTH_POLICY;
   if (request.method === "POST" && pathname === "/api/v1/orders") return ORDER_POLICY;
   if (request.method === "GET") return PUBLIC_READ_POLICY;
@@ -116,7 +125,7 @@ export async function middleware(request: NextRequest) {
   if (!policy || !limiters) return NextResponse.next();
 
   const limiter = limiters[policy.name];
-  const identifier = `${request.nextUrl.hostname}:${clientIp(request)}`;
+  const identifier = `${policy.name}:${clientIp(request)}`;
 
   try {
     const result = await limiter.limit(identifier);

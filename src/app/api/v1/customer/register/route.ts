@@ -3,14 +3,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { createCustomerSession, customerCookieOptions, customerRegistrationSchema, hashCustomerPassword, isCustomerAuthConfigured, normalizeCustomerEmail, normalizeCustomerPhone } from "@/lib/customer-auth";
 import { apiError } from "@/lib/http";
 import { createCustomerAccount, findCustomerByEmail } from "@/lib/store";
+import { enforceRegistrationLimits, registrationProtectionResponse } from "@/lib/registration-protection";
+import { readRegistrationJson } from "@/lib/registration-request";
+import { verifyRegistrationChallenge } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   if (!isCustomerAuthConfigured()) return apiError("O acesso de clientes ainda não está configurado.", 503);
-  const parsed = customerRegistrationSchema.safeParse(await request.json().catch(() => null));
+  const body = await readRegistrationJson(request);
+  const parsed = customerRegistrationSchema.safeParse(body);
   if (!parsed.success) return apiError("Confira os dados da sua conta.", 422, parsed.error.issues.map((issue) => issue.message));
+  const extra = body as Record<string, unknown>;
+  if (extra.website) return apiError("Não foi possível validar seu cadastro.", 422);
   const email = normalizeCustomerEmail(parsed.data.email);
+  try {
+    await enforceRegistrationLimits(request.headers, email);
+    await verifyRegistrationChallenge(extra.captchaToken, request.nextUrl.hostname);
+  } catch (error) { return registrationProtectionResponse(error); }
   if (await findCustomerByEmail(email)) return apiError("Já existe uma conta com este e-mail.", 409);
   try {
     const customer = await createCustomerAccount({

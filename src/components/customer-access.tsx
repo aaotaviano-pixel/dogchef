@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, LogIn, LockKeyhole, Mail, UserPlus
 
 import { getBrowserSupabase, hasGoogleSignIn } from "@/lib/supabase-browser";
 import type { CustomerAccount } from "@/lib/types";
+import { RegistrationChallenge } from "@/components/registration-challenge";
 
 export function CustomerAccess({ onAuthenticated, googleReturnTo }: { onAuthenticated: (customer: CustomerAccount) => void; googleReturnTo?: string }) {
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
@@ -14,6 +15,9 @@ export function CustomerAccess({ onAuthenticated, googleReturnTo }: { onAuthenti
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState({ name: "", phone: "", email: "", password: "" });
+  const [website, setWebsite] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [challengeAttempt, setChallengeAttempt] = useState(0);
 
   const isForgot = mode === "forgot";
 
@@ -26,7 +30,7 @@ export function CustomerAccess({ onAuthenticated, googleReturnTo }: { onAuthenti
       const response = await fetch(`/api/v1/customer/${mode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(mode === "register" ? { ...form, website, captchaToken } : form),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.details?.[0] || data.error || "Não foi possível acessar sua conta.");
@@ -35,6 +39,7 @@ export function CustomerAccess({ onAuthenticated, googleReturnTo }: { onAuthenti
       setError(requestError instanceof Error ? requestError.message : "Não foi possível acessar sua conta.");
     } finally {
       setBusy(false);
+      if (mode === "register") { setCaptchaToken(""); setChallengeAttempt((attempt) => attempt + 1); }
     }
   }
 
@@ -88,12 +93,14 @@ export function CustomerAccess({ onAuthenticated, googleReturnTo }: { onAuthenti
     {isForgot ? <form onSubmit={requestPasswordReset}><label className="field"><span>E-mail</span><input required type="email" autoComplete="email" placeholder="voce@email.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })}/></label>{error && <p className="form-error">{error}</p>}{notice && <p className="customer-notice"><CheckCircle2 size={16}/><span>{notice}</span></p>}<button className="button button-primary full" disabled={busy}>{busy ? "Enviando..." : <>Enviar link de recuperação<ArrowRight size={17}/></>}</button><button type="button" className="button button-ghost full access-back-button" onClick={() => { setMode("login"); setError(""); setNotice(""); }}><ArrowLeft size={17}/>Voltar para entrar</button></form> : <>
       {hasGoogleSignIn() && <><button type="button" className="button google-login-button full" disabled={googleBusy || busy} onClick={() => void enterWithGoogle()}><LogIn size={18}/>{googleBusy ? "Abrindo Google..." : "Continuar com Google"}</button><div className="access-divider"><span>ou use seu e-mail</span></div></>}
       <form onSubmit={submit}>
+        {mode === "register" && <div className="registration-honeypot" aria-hidden="true"><label>Deixe este campo vazio<input name="website" type="text" tabIndex={-1} autoComplete="off" value={website} onChange={(event) => setWebsite(event.target.value)} /></label></div>}
         {mode === "register" && <div className="form-grid"><label className="field"><span>Seu nome</span><input required minLength={2} autoComplete="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })}/></label><label className="field"><span>Telefone</span><input required minLength={10} inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })}/></label></div>}
         <label className="field"><span>E-mail</span><input required type="email" autoComplete="email" placeholder="voce@email.com" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })}/></label>
         <label className="field"><span>Senha</span><input required type="password" minLength={mode === "register" ? 8 : 1} maxLength={72} autoComplete={mode === "register" ? "new-password" : "current-password"} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })}/>{mode === "register" && <small>Use pelo menos 8 caracteres.</small>}</label>
         {mode === "login" && <button type="button" className="text-button forgot-password-button" onClick={() => { setMode("forgot"); setError(""); setNotice(""); }}>Esqueci minha senha</button>}
         {error && <p className="form-error">{error}</p>}
-        <button className="button button-primary full" disabled={busy}>{busy ? "Aguarde..." : <>{mode === "login" ? "Entrar" : "Criar conta"}<ArrowRight size={17}/></>}</button>
+        {mode === "register" && <RegistrationChallenge key={challengeAttempt} onToken={setCaptchaToken} />}
+        <button className="button button-primary full" disabled={busy || (mode === "register" && Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) && !captchaToken)}>{busy ? "Aguarde..." : <>{mode === "login" ? "Entrar" : "Criar conta"}<ArrowRight size={17}/></>}</button>
       </form>
     </>}
     <p className="access-legal">Ao continuar, você concorda com os <Link href="/termos-de-uso">Termos de uso</Link> e a <Link href="/politica-de-privacidade">Política de privacidade</Link>.</p>
