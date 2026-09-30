@@ -18,7 +18,7 @@ const statusLabels: Record<Order["status"], string> = {
   cancelled: "Cancelado",
 };
 
-export function CustomerOrders() {
+export function CustomerOrders({ turnstileSiteKey }: { turnstileSiteKey: string | null }) {
   const [customer, setCustomer] = useState<CustomerAccount | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,7 +137,7 @@ export function CustomerOrders() {
     <section className="account-content">
       <div className="account-title"><p className="eyebrow">Sua conta</p><h1>Meus pedidos</h1><p>Acompanhe pedidos atuais e consulte seu histórico.</p></div>
       {notice && <p className="customer-notice"><Check size={17}/><span>{notice}</span><button onClick={() => setNotice("")} aria-label="Fechar aviso"><X size={15}/></button></p>}
-      {loading ? <div className="account-empty"><Clock3 size={28}/><p>Carregando sua conta...</p></div> : !customer ? <CustomerAccess onAuthenticated={() => void load(true)}/> : <>
+      {loading ? <div className="account-empty"><Clock3 size={28}/><p>Carregando sua conta...</p></div> : !customer ? <CustomerAccess turnstileSiteKey={turnstileSiteKey} onAuthenticated={() => void load(true)}/> : <>
         <div className="account-welcome"><div><b>Olá, {customer.name.split(" ")[0]}</b><small>{customer.email}</small></div><div className="account-welcome-actions">{notificationsSupported && !alertsEnabled && <button onClick={() => void enableAlerts()}><BellRing size={16}/>Ativar avisos</button>}<button onClick={logout}><LogOut size={16}/>Sair</button></div></div>
         {!customer.profileComplete && <form className="complete-profile" onSubmit={savePhone}><div><b>Complete seu cadastro</b><small>Precisamos do telefone somente para identificar e entregar seu pedido.</small></div><label className="field"><span>Telefone</span><input required minLength={10} inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" value={phone} onChange={(event) => setPhone(event.target.value)}/></label><button className="button button-primary" disabled={savingPhone}>{savingPhone ? "Salvando..." : "Salvar telefone"}</button></form>}
         {error && <p className="form-error">{error}</p>}

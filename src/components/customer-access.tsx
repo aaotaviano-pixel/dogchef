@@ -8,7 +8,7 @@ import { getBrowserSupabase, hasGoogleSignIn } from "@/lib/supabase-browser";
 import type { CustomerAccount } from "@/lib/types";
 import { RegistrationChallenge } from "@/components/registration-challenge";
 
-export function CustomerAccess({ onAuthenticated, googleReturnTo }: { onAuthenticated: (customer: CustomerAccount) => void; googleReturnTo?: string }) {
+export function CustomerAccess({ onAuthenticated, googleReturnTo, turnstileSiteKey }: { onAuthenticated: (customer: CustomerAccount) => void; googleReturnTo?: string; turnstileSiteKey: string | null }) {
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
@@ -99,8 +99,8 @@ export function CustomerAccess({ onAuthenticated, googleReturnTo }: { onAuthenti
         <label className="field"><span>Senha</span><input required type="password" minLength={mode === "register" ? 8 : 1} maxLength={72} autoComplete={mode === "register" ? "new-password" : "current-password"} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })}/>{mode === "register" && <small>Use pelo menos 8 caracteres.</small>}</label>
         {mode === "login" && <button type="button" className="text-button forgot-password-button" onClick={() => { setMode("forgot"); setError(""); setNotice(""); }}>Esqueci minha senha</button>}
         {error && <p className="form-error">{error}</p>}
-        {mode === "register" && <RegistrationChallenge key={challengeAttempt} onToken={setCaptchaToken} />}
-        <button className="button button-primary full" disabled={busy || (mode === "register" && Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY) && !captchaToken)}>{busy ? "Aguarde..." : <>{mode === "login" ? "Entrar" : "Criar conta"}<ArrowRight size={17}/></>}</button>
+        {mode === "register" && turnstileSiteKey && <RegistrationChallenge key={challengeAttempt} siteKey={turnstileSiteKey} onToken={setCaptchaToken} />}
+        <button className="button button-primary full" disabled={busy || (mode === "register" && Boolean(turnstileSiteKey) && !captchaToken)}>{busy ? "Aguarde..." : <>{mode === "login" ? "Entrar" : "Criar conta"}<ArrowRight size={17}/></>}</button>
       </form>
     </>}
     <p className="access-legal">Ao continuar, você concorda com os <Link href="/termos-de-uso">Termos de uso</Link> e a <Link href="/politica-de-privacidade">Política de privacidade</Link>.</p>

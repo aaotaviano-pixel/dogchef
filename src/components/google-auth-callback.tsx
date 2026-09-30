@@ -13,7 +13,7 @@ function safeNextPath() {
   return next.startsWith("/") && !next.startsWith("//") ? next : "/meus-pedidos";
 }
 
-export function GoogleAuthCallback() {
+export function GoogleAuthCallback({ turnstileSiteKey }: { turnstileSiteKey: string | null }) {
   const [error, setError] = useState("");
   const [needsChallenge, setNeedsChallenge] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
@@ -49,6 +49,7 @@ export function GoogleAuthCallback() {
         }
         if (!active) return;
         if (payload?.code === "CAPTCHA_REQUIRED" || payload?.code === "CAPTCHA_INVALID") {
+          if (!turnstileSiteKey) throw new Error("A verificação de segurança do cadastro não está disponível. Tente novamente em instantes.");
           setCaptchaToken("");
           setNeedsChallenge(true);
           setChallengeAttempt((attempt) => attempt + 1);
@@ -62,7 +63,7 @@ export function GoogleAuthCallback() {
     };
     void finish();
     return () => { active = false; activeRequest.abort(); };
-  }, [captchaToken, needsChallenge]);
+  }, [captchaToken, needsChallenge, turnstileSiteKey]);
 
-  return <main className="auth-callback-shell"><section className="auth-callback-card"><span className="brand-mark"><ChefHat size={24}/></span>{error ? <><CircleAlert size={28}/><h1>Não conseguimos entrar com o Google</h1><p>{error}</p><Link className="button button-primary" href="/meus-pedidos">Voltar para o acesso</Link></> : needsChallenge && !captchaToken ? <><h1>Quase pronto!</h1><p>Confirme a verificação de segurança para criar sua conta.</p><RegistrationChallenge key={challengeAttempt} onToken={setCaptchaToken}/></> : <><LoaderCircle className="auth-spinner" size={30}/><h1>Confirmando seu acesso</h1><p>Isso leva só alguns segundos.</p></>}</section></main>;
+  return <main className="auth-callback-shell"><section className="auth-callback-card"><span className="brand-mark"><ChefHat size={24}/></span>{error ? <><CircleAlert size={28}/><h1>Não conseguimos entrar com o Google</h1><p>{error}</p><Link className="button button-primary" href="/meus-pedidos">Voltar para o acesso</Link></> : needsChallenge && !captchaToken && turnstileSiteKey ? <><h1>Quase pronto!</h1><p>Confirme a verificação de segurança para criar sua conta.</p><RegistrationChallenge key={challengeAttempt} siteKey={turnstileSiteKey} onToken={setCaptchaToken}/></> : <><LoaderCircle className="auth-spinner" size={30}/><h1>Confirmando seu acesso</h1><p>Isso leva só alguns segundos.</p></>}</section></main>;
 }

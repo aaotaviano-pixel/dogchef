@@ -63,7 +63,7 @@ function productVisualTreatment(product: Product) {
   return { tone: "classic", label: "Clássico" };
 }
 
-export function Storefront() {
+export function Storefront({ turnstileSiteKey }: { turnstileSiteKey: string | null }) {
   const router = useRouter();
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -486,7 +486,7 @@ export function Storefront() {
         <a className={!catalog.whatsappConfigured ? "dogchef-social-button dogchef-social-button--whatsapp is-pending" : "dogchef-social-button dogchef-social-button--whatsapp"} href={catalog.whatsappUrl || WHATSAPP_PENDING_URL} target="_blank" rel="noreferrer" aria-label="Falar com a loja pelo WhatsApp" title={catalog.whatsappConfigured ? "WhatsApp" : "WhatsApp aguardando número comercial"} onClick={(event) => { if (!catalog.whatsappConfigured) event.preventDefault(); }}><WhatsAppLogo size={21}/></a>
       </div>
 
-      {accountOpen && <div className="overlay" role="dialog" aria-modal="true" aria-label="Minha conta"><div className="bottom-sheet account-sheet"><button className="sheet-close" onClick={() => setAccountOpen(false)} aria-label="Fechar"><X size={21}/></button>{customer ? <div className="account-menu"><p className="eyebrow">Sua conta</p><h2>Olá, {customer.name.split(" ")[0]}</h2><p>{customer.email}</p>{!customer.profileComplete && <small className="account-profile-pending">Telefone pendente. Complete no checkout ou em Meus pedidos.</small>}<Link className="button button-primary full" href="/meus-pedidos"><ReceiptText size={17}/>Meus pedidos</Link><button className="button button-ghost full" onClick={logoutCustomer}><LogOut size={17}/>Sair da conta</button></div> : <CustomerAccess googleReturnTo="/?account=1" onAuthenticated={(account) => { handleCustomerAuth(account); setAccountOpen(false); }}/>}</div></div>}
+      {accountOpen && <div className="overlay" role="dialog" aria-modal="true" aria-label="Minha conta"><div className="bottom-sheet account-sheet"><button className="sheet-close" onClick={() => setAccountOpen(false)} aria-label="Fechar"><X size={21}/></button>{customer ? <div className="account-menu"><p className="eyebrow">Sua conta</p><h2>Olá, {customer.name.split(" ")[0]}</h2><p>{customer.email}</p>{!customer.profileComplete && <small className="account-profile-pending">Telefone pendente. Complete no checkout ou em Meus pedidos.</small>}<Link className="button button-primary full" href="/meus-pedidos"><ReceiptText size={17}/>Meus pedidos</Link><button className="button button-ghost full" onClick={logoutCustomer}><LogOut size={17}/>Sair da conta</button></div> : <CustomerAccess turnstileSiteKey={turnstileSiteKey} googleReturnTo="/?account=1" onAuthenticated={(account) => { handleCustomerAuth(account); setAccountOpen(false); }}/>}</div></div>}
 
       {selectedProduct && <div className="overlay" role="dialog" aria-modal="true" aria-label={`Personalizar ${selectedProduct.name}`}>
         <div className="bottom-sheet configurator">
@@ -507,7 +507,7 @@ export function Storefront() {
             <p className="eyebrow">Finalizar pedido</p>
             <h2>Só faltam seus dados</h2>
             <div className="checkout-summary"><span>{totalItems} itens</span><strong>{formatCurrency(subtotal)}</strong></div>
-            {!customer ? <CustomerAccess googleReturnTo="/?checkout=1" onAuthenticated={handleCustomerAuth}/> : <form onSubmit={submitOrder}><div className="checkout-account"><span><UserRound size={18}/></span><div><b>{customer.name}</b><small>{customer.email}{customer.phone ? ` · ${customer.phone}` : " · telefone pendente"}</small></div><button type="button" onClick={() => { setCheckout(false); setAccountOpen(true); }}>Trocar</button></div>
+            {!customer ? <CustomerAccess turnstileSiteKey={turnstileSiteKey} googleReturnTo="/?checkout=1" onAuthenticated={handleCustomerAuth}/> : <form onSubmit={submitOrder}><div className="checkout-account"><span><UserRound size={18}/></span><div><b>{customer.name}</b><small>{customer.email}{customer.phone ? ` · ${customer.phone}` : " · telefone pendente"}</small></div><button type="button" onClick={() => { setCheckout(false); setAccountOpen(true); }}>Trocar</button></div>
             {!customer.profileComplete && <label className="field complete-phone-field"><span>Telefone para o pedido</span><input required minLength={10} inputMode="tel" autoComplete="tel" placeholder="(00) 00000-0000" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })}/><small>Ele será salvo na sua conta após a confirmação.</small></label>}
             <fieldset className="choice-field">
               <legend>Como você recebe?</legend>
