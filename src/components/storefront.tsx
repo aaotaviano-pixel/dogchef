@@ -7,6 +7,8 @@ import { ArrowLeft, ChefHat, ChevronDown, ChevronLeft, ChevronRight, Clock3, Cre
 import { useRouter } from "next/navigation";
 
 import { formatCurrency } from "@/lib/money";
+import { clearCheckoutAttempt, getCheckoutAttempt } from "@/lib/checkout-attempt";
+import { parseStoredCart } from "@/lib/cart-storage";
 import { CustomerAccess } from "@/components/customer-access";
 import { InstagramLogo, WhatsAppLogo } from "@/components/social-icons";
 import { buildCategoryMarqueeItems, buildCategoryTiles, selectFeaturedProducts, selectShowcaseProducts } from "@/lib/storefront-presentation";
@@ -107,8 +109,14 @@ export function Storefront() {
       }
     }, 0);
     fetch("/api/v1/menu", { cache: "no-store" })
-      .then((response) => response.json())
-      .then((data: Catalog) => setCatalog(data))
+      .then(async (response) => {
+        const data = await response.json().catch(() => null) as Catalog | null;
+        if (!response.ok || !data || !Array.isArray(data.categories) || !Array.isArray(data.products)) {
+          throw new Error("Cardápio indisponível.");
+        }
+        return data;
+      })
+      .then((data) => setCatalog(data))
       .catch(() => setFormError("Não conseguimos carregar o cardápio. Atualize a página para tentar novamente."))
       .finally(() => setCatalogLoading(false));
     fetch("/api/v1/customer/session", { cache: "no-store" })
@@ -117,15 +125,14 @@ export function Storefront() {
       .catch(() => undefined);
     const restoreCart = window.setTimeout(() => {
       try {
-        const saved = window.localStorage.getItem("dogchef-cart");
-        if (saved) setCart(JSON.parse(saved) as CartLine[]);
+        setCart(parseStoredCart(window.localStorage.getItem("dogchef-cart")));
       } catch { /* an empty cart is safe fallback */ }
     }, 0);
     return () => { window.clearTimeout(restoreReturnState); window.clearTimeout(restoreCart); };
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("dogchef-cart", JSON.stringify(cart));
+    try { window.localStorage.setItem("dogchef-cart", JSON.stringify(cart)); } catch { /* checkout remains available without browser persistence */ }
   }, [cart]);
 
   useEffect(() => {
@@ -306,8 +313,7 @@ export function Storefront() {
       setFormError("Informe um telefone válido para concluir o pedido."); return;
     }
     setIsSubmitting(true);
-    const payload: CheckoutInput = {
-      clientReference: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+    const checkoutPayload: Omit<CheckoutInput, "clientReference"> = {
       customer: {
         name: form.name,
         phone: form.phone,
@@ -318,6 +324,8 @@ export function Storefront() {
       paymentMethod: form.paymentMethod,
       items: cart,
     };
+    const clientReference = getCheckoutAttempt(window.localStorage, checkoutPayload);
+    const payload: CheckoutInput = { ...checkoutPayload, clientReference };
     try {
       if (customer && !customer.profileComplete) {
         const profileResponse = await fetch("/api/v1/customer/profile", {
@@ -332,7 +340,10 @@ export function Storefront() {
       const response = await fetch("/api/v1/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Não foi possível enviar o pedido.");
-      window.localStorage.removeItem("dogchef-cart");
+      try {
+        window.localStorage.removeItem("dogchef-cart");
+        clearCheckoutAttempt(window.localStorage, clientReference);
+      } catch { /* a successful order must not depend on browser storage */ }
       setCart([]);
       router.push(data.trackingUrl);
     } catch (error) {

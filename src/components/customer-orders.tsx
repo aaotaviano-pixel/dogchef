@@ -6,6 +6,7 @@ import { ArrowLeft, BellRing, Check, ChefHat, Clock3, LogOut, PackageCheck, Rece
 
 import { CustomerAccess } from "@/components/customer-access";
 import { formatCurrency } from "@/lib/money";
+import { reconcileOrderCollection } from "@/lib/order-tracking";
 import type { CustomerAccount, Order } from "@/lib/types";
 
 const statusLabels: Record<Order["status"], string> = {
@@ -27,14 +28,18 @@ export function CustomerOrders() {
   const [notificationsSupported, setNotificationsSupported] = useState(false);
   const [phone, setPhone] = useState("");
   const [savingPhone, setSavingPhone] = useState(false);
-  const statuses = useRef(new Map<string, Order["status"]>());
+  const statuses = useRef(new Map<string, { status: Order["status"]; version: number }>());
   const hasLoadedOrders = useRef(false);
+  const loadGeneration = useRef(0);
 
   const load = useCallback(async (initial = false) => {
+    const generation = ++loadGeneration.current;
     if (initial) setLoading(true);
     try {
       const sessionResponse = await fetch("/api/v1/customer/session", { cache: "no-store" });
-      const session = await sessionResponse.json();
+      const session = await sessionResponse.json().catch(() => null) as { customer?: CustomerAccount | null; error?: string } | null;
+      if (!sessionResponse.ok || !session) throw new Error(session?.error || "Não foi possível carregar sua conta.");
+      if (generation !== loadGeneration.current) return;
       if (!session.customer) {
         setCustomer(null);
         setOrders([]);
@@ -44,11 +49,15 @@ export function CustomerOrders() {
       }
       setCustomer(session.customer);
       const ordersResponse = await fetch("/api/v1/customer/orders", { cache: "no-store" });
-      const data = await ordersResponse.json();
-      if (!ordersResponse.ok) throw new Error(data.error || "Não foi possível carregar seus pedidos.");
+      const data = await ordersResponse.json().catch(() => null) as { orders?: Order[]; error?: string } | null;
+      if (!ordersResponse.ok || !data || !Array.isArray(data.orders)) throw new Error(data?.error || "Não foi possível carregar seus pedidos.");
+      if (generation !== loadGeneration.current) return;
       const incoming = data.orders as Order[];
       if (hasLoadedOrders.current) {
-        const changed = incoming.find((order) => statuses.current.get(order.id) && statuses.current.get(order.id) !== order.status);
+        const changed = incoming.find((order) => {
+          const previous = statuses.current.get(order.id);
+          return previous && order.version >= previous.version && previous.status !== order.status;
+        });
         if (changed) {
           const message = `Pedido ${changed.publicCode}: ${statusLabels[changed.status]}.`;
           setNotice(message);
@@ -57,26 +66,36 @@ export function CustomerOrders() {
           }
         }
       }
-      statuses.current = new Map(incoming.map((order) => [order.id, order.status]));
+      statuses.current = new Map(incoming.map((order) => [order.id, { status: order.status, version: order.version }]));
       hasLoadedOrders.current = true;
-      setOrders(incoming);
+      setOrders((current) => reconcileOrderCollection(current, incoming));
       setError("");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Não foi possível carregar seus pedidos.");
+      if (generation === loadGeneration.current) {
+        setError(requestError instanceof Error ? requestError.message : "Não foi possível carregar seus pedidos.");
+      }
     } finally {
-      if (initial) setLoading(false);
+      if (initial && generation === loadGeneration.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const initialLoad = window.setTimeout(() => {
+    let active = true;
+    let nextLoad: number | undefined;
+    const poll = async (initial: boolean) => {
       const supported = typeof Notification !== "undefined";
       setNotificationsSupported(supported);
       setAlertsEnabled(supported && Notification.permission === "granted");
-      void load(true);
-    }, 0);
-    const poll = window.setInterval(() => void load(false), 8_000);
-    return () => { window.clearTimeout(initialLoad); window.clearInterval(poll); };
+      await load(initial);
+      if (active) nextLoad = window.setTimeout(() => void poll(false), 8_000);
+    };
+    const initialLoad = window.setTimeout(() => void poll(true), 0);
+    return () => {
+      active = false;
+      loadGeneration.current += 1;
+      window.clearTimeout(initialLoad);
+      if (nextLoad !== undefined) window.clearTimeout(nextLoad);
+    };
   }, [load]);
 
   async function enableAlerts() {

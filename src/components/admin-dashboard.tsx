@@ -152,6 +152,7 @@ export function AdminDashboard() {
   });
   const knownNewOrders = useRef(new Set<string>());
   const hasLoaded = useRef(false);
+  const loadGeneration = useRef(0);
   const qzClosedHandler = useRef<() => void>(() => undefined);
   const qzReconnectTimer = useRef<number | undefined>(undefined);
   const qzReconnectAttempts = useRef(0);
@@ -204,6 +205,7 @@ export function AdminDashboard() {
   };
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     try {
       const response = await fetch("/api/v1/admin/dashboard", { cache: "no-store" });
       if (response.status === 401) {
@@ -212,6 +214,7 @@ export function AdminDashboard() {
       }
       const payload = await response.json() as DashboardPayload & { error?: string };
       if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o painel.");
+      if (generation !== loadGeneration.current) return;
       const savedPrinterId = window.localStorage.getItem("dogchef-printer-id");
       if (savedPrinterId && payload.print.printers.some((printer) => printer.id === savedPrinterId)) payload.print.selectedPrinterId = savedPrinterId;
       const freshPending = payload.orders.filter((order) => order.status === "pending_approval" && !knownNewOrders.current.has(order.id));
@@ -248,21 +251,28 @@ export function AdminDashboard() {
       ])));
       setError("");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Não foi possível carregar o painel.");
+      if (generation === loadGeneration.current) {
+        setError(requestError instanceof Error ? requestError.message : "Não foi possível carregar o painel.");
+      }
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [router]);
 
   useEffect(() => {
-    const initialLoad = window.setTimeout(() => {
+    let active = true;
+    let nextLoad: number | undefined;
+    const poll = async () => {
       setAlertsEnabled(typeof Notification !== "undefined" && Notification.permission === "granted");
-      void load();
-    }, 0);
-    const timer = window.setInterval(load, 8_000);
+      await load();
+      if (active) nextLoad = window.setTimeout(() => void poll(), 8_000);
+    };
+    const initialLoad = window.setTimeout(() => void poll(), 0);
     return () => {
+      active = false;
+      loadGeneration.current += 1;
       window.clearTimeout(initialLoad);
-      window.clearInterval(timer);
+      if (nextLoad !== undefined) window.clearTimeout(nextLoad);
     };
   }, [load]);
 

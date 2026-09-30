@@ -40,6 +40,7 @@ const MAX_PRINT_ATTEMPTS = 5;
 
 const memory = {
   orders: [] as Order[],
+  clientReferences: {} as Record<string, string>,
   customerAccounts: [] as StoredCustomerAccount[],
   trackingHashes: {} as Record<string, string>,
   printJobs: [] as PrintJob[],
@@ -97,11 +98,13 @@ async function ensureLocalCommerceLoaded() {
       orders?: Order[];
       customerAccounts?: StoredCustomerAccount[];
       trackingHashes?: Record<string, string>;
+      clientReferences?: Record<string, string>;
       metricsResetAt?: string;
     };
     memory.orders = Array.isArray(stored.orders) ? stored.orders : [];
     memory.customerAccounts = Array.isArray(stored.customerAccounts) ? stored.customerAccounts : [];
     memory.trackingHashes = stored.trackingHashes && typeof stored.trackingHashes === "object" ? stored.trackingHashes : {};
+    memory.clientReferences = stored.clientReferences && typeof stored.clientReferences === "object" ? stored.clientReferences : {};
     memory.metricsResetAt = typeof stored.metricsResetAt === "string" ? stored.metricsResetAt : undefined;
   } catch {
     // The empty local commerce state is the intended first-run state.
@@ -116,6 +119,7 @@ async function persistLocalCommerce() {
     orders: memory.orders,
     customerAccounts: memory.customerAccounts,
     trackingHashes: memory.trackingHashes,
+    clientReferences: memory.clientReferences,
     metricsResetAt: memory.metricsResetAt,
   }, null, 2), "utf8");
   await rename(temporaryFile, localCommerceFile);
@@ -539,7 +543,7 @@ export async function updateCustomerPhone(id: string, phone: string) {
   return deepCopy(publicCustomer(account));
 }
 
-export async function createOrder(input: CheckoutInput, customerId: string): Promise<{ order: Order; trackingToken: string }> {
+export async function createOrder(input: CheckoutInput, customerId: string): Promise<{ order: Order; trackingToken?: string; reused: boolean }> {
   const catalog = await getCatalog();
   const quote = createQuote(input, catalog);
   if (input.paymentMethod === "pix" && !catalog.pixConfigured) {
@@ -572,14 +576,23 @@ export async function createOrder(input: CheckoutInput, customerId: string): Pro
 
   const db = getSupabase();
   if (db) {
-    const { data: duplicate } = await db
-      .from("orders")
-      .select("public_code")
-      .eq("client_reference", input.clientReference)
-      .maybeSingle();
-    if (duplicate?.public_code) {
-      throw new Error("Este pedido já foi recebido. Consulte o acompanhamento para ver o status.");
-    }
+    const resumeExistingOrder = async () => {
+      const { data: duplicate, error: duplicateError } = await db
+        .from("orders")
+        .select("public_code, customer_id")
+        .eq("client_reference", input.clientReference)
+        .maybeSingle();
+      if (duplicateError) throw new Error("Não foi possível confirmar o envio do pedido. Tente novamente em instantes.");
+      if (!duplicate?.public_code) return null;
+      if (String(duplicate.customer_id) !== customerId) throw new Error("Não foi possível confirmar este pedido.");
+      const existing = await getOrder(String(duplicate.public_code), undefined, customerId);
+      if (!existing || !existing.quote.items.length) {
+        throw new Error("O pedido foi recebido, mas precisa ser conferido pela loja antes de uma nova tentativa.");
+      }
+      return { order: existing, reused: true };
+    };
+    const duplicate = await resumeExistingOrder();
+    if (duplicate) return duplicate;
 
     const { error } = await db.from("orders").insert({
       id: order.id,
@@ -601,7 +614,13 @@ export async function createOrder(input: CheckoutInput, customerId: string): Pro
       customer_id: customerId,
       payment_data: order.payment ?? null,
     });
-    if (error) throw new Error("Não foi possível salvar seu pedido. Tente novamente em instantes.");
+    if (error) {
+      if (error.code === "23505") {
+        const racedDuplicate = await resumeExistingOrder();
+        if (racedDuplicate) return racedDuplicate;
+      }
+      throw new Error("Não foi possível salvar seu pedido. Tente novamente em instantes.");
+    }
 
     const { error: linesError } = await db.from("order_items").insert(
       quote.items.map((line) => ({
@@ -615,7 +634,12 @@ export async function createOrder(input: CheckoutInput, customerId: string): Pro
         options: line.optionals,
       })),
     );
-    if (linesError) throw new Error("O pedido foi criado, mas houve um problema ao salvar os itens. Contate a loja.");
+    if (linesError) {
+      // The row belongs exclusively to this failed attempt and has no items because
+      // PostgreSQL inserts the item batch atomically. Remove it so a safe retry can proceed.
+      await db.from("orders").delete().eq("id", order.id);
+      throw new Error("Não foi possível concluir os itens do pedido. Tente novamente em instantes.");
+    }
     await db.from("order_events").insert({
       order_id: order.id,
       to_status: order.status,
@@ -623,12 +647,18 @@ export async function createOrder(input: CheckoutInput, customerId: string): Pro
     });
   } else {
     await ensureLocalCommerceLoaded();
+    const existingId = memory.clientReferences[input.clientReference];
+    if (existingId) {
+      const existing = memory.orders.find((candidate) => candidate.id === existingId && candidate.customerId === customerId);
+      if (existing) return { order: deepCopy(existing), reused: true };
+    }
     memory.orders.unshift(order);
+    memory.clientReferences[input.clientReference] = order.id;
     memory.trackingHashes[order.id] = hashTrackingToken(trackingToken);
     await persistLocalCommerce();
   }
 
-  return { order: deepCopy(order), trackingToken };
+  return { order: deepCopy(order), trackingToken, reused: false };
 }
 
 function mapRemoteOrder(row: Record<string, unknown>): Order {

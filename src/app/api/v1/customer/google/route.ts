@@ -30,6 +30,10 @@ export async function POST(request: NextRequest) {
   const { data, error } = await db.auth.getUser(parsed.data.accessToken);
   const user = data.user;
   if (error || !user?.id || !user.email || !user.email_confirmed_at || !user.identities?.some((identity) => identity.provider === "google")) {
+    console.warn("[DogChef Auth] GOOGLE_IDENTITY_REJECTED", {
+      status: error?.status ?? 401,
+      code: error?.code ?? "invalid_google_identity",
+    });
     return apiError("Não foi possível confirmar sua conta Google.", 401);
   }
 
@@ -53,6 +57,9 @@ export async function POST(request: NextRequest) {
     response.cookies.set({ ...customerCookieOptions(), value: createCustomerSession(customer.id) });
     return response;
   } catch (requestError) {
+    console.error("[DogChef Auth] GOOGLE_LOGIN_FAILED", {
+      reason: requestError instanceof Error ? requestError.message : "unknown_error",
+    });
     return apiError(requestError instanceof Error ? requestError.message : "Não foi possível acessar sua conta Google.", 422);
   }
 }

@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
         email: customer.email,
       },
     };
-    const { order, trackingToken } = await createOrder(input, customer.id);
+    const { order, trackingToken, reused } = await createOrder(input, customer.id);
     let paymentError: string | undefined;
-    if (order.paymentMethod === "pix") {
+    if (!reused && order.paymentMethod === "pix") {
       try {
         const pix = await createPixPayment(order);
         if ("configurationRequired" in pix) {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         trackingUrl: buildTrackingUrl(order.publicCode, trackingToken),
         paymentError,
       },
-      { status: 201, headers: { "Cache-Control": "no-store" } },
+      { status: reused ? 200 : 201, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Não foi possível criar o pedido.", 422);
