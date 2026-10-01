@@ -1532,6 +1532,20 @@ a { color: inherit; text-decoration: none; }
 .storefront-reference-redesign .header-cart-button strong { font-size: 13px; }
 .storefront-reference-redesign .header-cart-button:hover { color: var(--store-red); background: #FFF2EC; }
 
+@media (min-width: 840px) {
+  .storefront-reference-redesign .store-header {
+    width: min(100%, 1400px);
+    height: 84px;
+    padding-right: clamp(0px, calc((100vw - 1280px) / 2), 60px);
+    padding-left: clamp(0px, calc((100vw - 1280px) / 2), 60px);
+  }
+
+  .storefront-reference-redesign .brand-mark {
+    width: 52px;
+    height: 52px;
+  }
+}
+
 .storefront-reference-redesign .dogchef-hero {
   width: min(100%, 1400px);
   max-width: none;
