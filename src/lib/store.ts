@@ -8,6 +8,7 @@ import { defaultWorkingHours, products, seededCatalog } from "@/lib/seed";
 import { configuredPrinterOptions, defaultPrinterId, parseDiscoveredPrinters, preferredPrinterId } from "@/lib/printers";
 import { normalizeNeighborhood } from "@/lib/shop";
 import { getSupabase, hasSupabase } from "@/lib/supabase";
+import type { ReportOrder } from "@/lib/reports";
 import type { Catalog, Category, CheckoutInput, CustomerAccount, DeliveryZone, OptionGroup, Order, OrderStatus, PaymentStatus, PrintSettings, Product, ProductImage, ProductInput, PrinterOption, WorkingHour } from "@/lib/types";
 
 type PrintTicketPayload = {
@@ -871,6 +872,62 @@ export async function listDashboardOrders() {
   await ensureLocalCommerceLoaded();
   const orders = resetAt ? memory.orders.filter((order) => order.createdAt >= resetAt) : memory.orders;
   return deepCopy(orders);
+}
+
+export async function listReportOrders(startAt: string, endAt: string): Promise<ReportOrder[]> {
+  const db = getSupabase();
+  if (db) {
+    const pageSize = 500;
+    const rows: Record<string, unknown>[] = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await db
+        .from("orders")
+        .select("id, status, payment_method, delivery_type, total_cents, delivery_fee_cents, created_at, order_items(product_id, product_name, quantity, total_cents)")
+        .gte("created_at", startAt)
+        .lte("created_at", endAt)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(offset, offset + pageSize - 1);
+      if (error) throw new Error("Não foi possível carregar os dados do relatório.");
+      const page = (data ?? []) as Record<string, unknown>[];
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return rows.map((row) => ({
+      status: row.status as OrderStatus,
+      paymentMethod: row.payment_method as Order["paymentMethod"],
+      deliveryType: row.delivery_type as Order["deliveryType"],
+      totalCents: Number(row.total_cents),
+      deliveryFeeCents: Number(row.delivery_fee_cents),
+      createdAt: String(row.created_at),
+      items: (Array.isArray(row.order_items) ? row.order_items : []).map((item) => {
+        const line = item as Record<string, unknown>;
+        return {
+          productId: String(line.product_id),
+          productName: String(line.product_name),
+          quantity: Number(line.quantity),
+          totalCents: Number(line.total_cents),
+        };
+      }),
+    }));
+  }
+  await ensureLocalCommerceLoaded();
+  return memory.orders
+    .filter((order) => order.createdAt >= startAt && order.createdAt <= endAt)
+    .map((order) => ({
+      status: order.status,
+      paymentMethod: order.paymentMethod,
+      deliveryType: order.deliveryType,
+      totalCents: order.quote.totalCents,
+      deliveryFeeCents: order.quote.deliveryFeeCents,
+      createdAt: order.createdAt,
+      items: order.quote.items.map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        totalCents: item.totalCents,
+      })),
+    }));
 }
 
 export async function resetDashboardMetrics() {

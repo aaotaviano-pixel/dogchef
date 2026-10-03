@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx --test agent/ipp.test.ts agent/windows-printers.test.ts src/lib/cart-storage.test.ts src/lib/checkout-attempt.test.ts src/lib/google-auth.test.ts src/lib/local-printing.test.ts src/lib/order-tracking.test.ts src/lib/printers.test.ts src/lib/security.test.ts src/lib/storefront-presentation.test.ts src/lib/registration-protection.test.ts src/lib/registration-routes.test.ts",
+    "test": "tsx --test agent/ipp.test.ts agent/windows-printers.test.ts src/lib/cart-storage.test.ts src/lib/checkout-attempt.test.ts src/lib/google-auth.test.ts src/lib/local-printing.test.ts src/lib/order-tracking.test.ts src/lib/printers.test.ts src/lib/reports.test.ts src/lib/security.test.ts src/lib/storefront-presentation.test.ts src/lib/registration-protection.test.ts src/lib/registration-routes.test.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "print-agent": "tsx agent/index.ts",

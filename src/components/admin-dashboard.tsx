@@ -7,12 +7,15 @@ import { useRouter } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
+  BarChart3,
   BellRing,
+  CalendarDays,
   Check,
   ChefHat,
   CircleAlert,
   ClipboardList,
   Clock3,
+  DollarSign,
   ExternalLink,
   GalleryHorizontal,
   LayoutDashboard,
@@ -25,6 +28,7 @@ import {
   Power,
   Printer,
   RefreshCw,
+  ReceiptText,
   Save,
   Search,
   Settings,
@@ -45,6 +49,7 @@ import {
 } from "@/lib/local-printing";
 import { formatCurrency } from "@/lib/money";
 import { createBrowserQzAdapter, openNativePrintWindow } from "@/lib/qz-browser";
+import type { ReportPeriod, SalesReport } from "@/lib/reports";
 import type { Catalog, Order, OrderStatus, PrintSettings, Product, WorkingHour } from "@/lib/types";
 
 type DashboardPayload = {
@@ -56,7 +61,7 @@ type DashboardPayload = {
   print: PrintSettings;
 };
 
-type AdminPanel = "dashboard" | "orders" | "products" | "showcase" | "settings" | "print";
+type AdminPanel = "dashboard" | "orders" | "products" | "showcase" | "settings" | "print" | "reports";
 type ProductFilter = "all" | "active" | "paused" | "featured";
 type LocalPrintState = {
   status: "connecting" | "connected" | "disconnected" | "error";
@@ -82,6 +87,7 @@ const panelCopy: Record<AdminPanel, { title: string; subtitle: string }> = {
   showcase: { title: "Showcase", subtitle: "Escolha o banner da página inicial" },
   settings: { title: "Configurações", subtitle: "Loja, horários e entrega" },
   print: { title: "Impressão", subtitle: "Acompanhe a impressora térmica" },
+  reports: { title: "Relatórios", subtitle: "Vendas e desempenho da loja" },
 };
 
 const weekdays = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -155,6 +161,10 @@ export function AdminDashboard() {
   const [adminPasswordConfirmation, setAdminPasswordConfirmation] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [productFilter, setProductFilter] = useState<ProductFilter>("all");
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>("day");
+  const [report, setReport] = useState<SalesReport | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [localPrint, setLocalPrint] = useState<LocalPrintState>({
@@ -166,6 +176,7 @@ export function AdminDashboard() {
   const knownNewOrders = useRef(new Set<string>());
   const hasLoaded = useRef(false);
   const loadGeneration = useRef(0);
+  const reportGeneration = useRef(0);
   const qzClosedHandler = useRef<() => void>(() => undefined);
   const qzReconnectTimer = useRef<number | undefined>(undefined);
   const qzReconnectAttempts = useRef(0);
@@ -272,6 +283,28 @@ export function AdminDashboard() {
     }
   }, [router]);
 
+  const loadReport = useCallback(async (period: ReportPeriod) => {
+    const generation = ++reportGeneration.current;
+    setReport((current) => current?.period === period ? current : null);
+    setReportLoading(true);
+    try {
+      const response = await fetch(`/api/v1/admin/reports?period=${period}`, { cache: "no-store" });
+      if (response.status === 401) {
+        router.replace("/admin/login");
+        return;
+      }
+      const payload = await response.json() as SalesReport & { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Não foi possível carregar o relatório.");
+      if (generation !== reportGeneration.current) return;
+      setReport(payload);
+      setReportError("");
+    } catch (requestError) {
+      if (generation === reportGeneration.current) setReportError(requestError instanceof Error ? requestError.message : "Não foi possível carregar o relatório.");
+    } finally {
+      if (generation === reportGeneration.current) setReportLoading(false);
+    }
+  }, [router]);
+
   useEffect(() => {
     let active = true;
     let nextLoad: number | undefined;
@@ -309,6 +342,7 @@ export function AdminDashboard() {
   function openPanel(panel: AdminPanel) {
     setActivePanel(panel);
     setSidebarOpen(false);
+    if (panel === "reports") void loadReport(reportPeriod);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -721,6 +755,8 @@ export function AdminDashboard() {
     const matchesFilter = productFilter === "all" || (productFilter === "active" && product.isAvailable) || (productFilter === "paused" && !product.isAvailable) || (productFilter === "featured" && product.featured);
     return matchesSearch && matchesFilter;
   });
+  const reportChartMax = Math.max(1, ...(report?.series.map((point) => point.revenueCents) ?? [0]));
+  const reportPaymentMax = Math.max(1, ...(report?.paymentMethods.map((item) => item.revenueCents) ?? [0]));
 
   const navItems: Array<{ id: AdminPanel; label: string; icon: typeof LayoutDashboard }> = [
     { id: "dashboard", label: "Visão geral", icon: LayoutDashboard },
@@ -729,6 +765,7 @@ export function AdminDashboard() {
     { id: "showcase", label: "Showcase", icon: GalleryHorizontal },
     { id: "settings", label: "Configurações", icon: Settings },
     { id: "print", label: "Impressão", icon: Printer },
+    { id: "reports", label: "Relatórios", icon: BarChart3 },
   ];
 
   function renderOrder(order: Order) {
@@ -823,6 +860,56 @@ export function AdminDashboard() {
           <div className="print-help"><b>Como funciona</b><p>Instale e deixe o QZ Tray aberto. Impressoras USB ou de rede ja instaladas no Windows aparecem automaticamente. Na primeira conexao, permita o acesso do DogChef e marque para lembrar.</p></div>
           {printOrders.length > 0 && <div className="print-jobs">{printOrders.map((order) => <article key={order.id}><div><b>{order.publicCode}</b><small>{order.customer.name} · {order.printStatus ? `fila legada: ${printLabels[order.printStatus]}` : "pronto para impressao local"}</small></div><button className="button button-dark" disabled={busyId === `order-${order.id}`} onClick={() => void printOrderLocally(order)}><Printer size={14}/>{busyId === `order-${order.id}` ? "Enviando..." : "Imprimir agora"}</button><button className="button button-ghost legacy-print-button" disabled={busyId === `queue-${order.id}`} onClick={() => void queuePrintOrder(order)}><RefreshCw size={14}/>Fila do agente</button></article>)}</div>}
           <details className="legacy-print-settings"><summary>Compatibilidade com o agente antigo</summary><div className="print-card"><Printer size={22}/><div><b>{data.print.agentConnected ? "Agente DogChef conectado" : "Agente DogChef desconectado"}</b><p>Esta fila permanece disponivel para instalacoes que ja usam o servico antigo.</p><label className="print-selector"><span>Impressora do agente</span><select value={data.print.selectedPrinterId} disabled={busyId === "printer"} onChange={(event) => void saveSelectedPrinter(event.target.value)}>{data.print.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}{printer.isDefault ? " · padrao" : ""}</option>)}</select></label></div></div><div className="print-actions"><button className="button button-ghost" disabled={busyId === "printer-refresh"} onClick={() => void refreshPrinterState()}><RefreshCw size={15}/>Atualizar agente</button></div></details>
+        </section>}
+
+        {activePanel === "reports" && <section className="admin-panel-view reports-view" aria-busy={reportLoading}>
+          <div className="report-toolbar">
+            <div className="report-period-tabs" aria-label="Período do relatório">
+              {([['day', 'Hoje'], ['week', 'Esta semana'], ['month', 'Este mês']] as Array<[ReportPeriod, string]>).map(([period, label]) => <button key={period} className={reportPeriod === period ? "is-active" : ""} onClick={() => { setReportPeriod(period); void loadReport(period); }}>{label}</button>)}
+            </div>
+            <button className="button button-ghost report-refresh" disabled={reportLoading} onClick={() => void loadReport(reportPeriod)}><RefreshCw size={15}/>{reportLoading ? "Atualizando..." : "Atualizar"}</button>
+          </div>
+
+          {reportError && <div className="report-error"><CircleAlert size={19}/><span>{reportError}</span><button onClick={() => void loadReport(reportPeriod)}>Tentar novamente</button></div>}
+          {reportLoading && !report && <div className="report-loading"><BarChart3 size={32}/><b>Preparando o relatório...</b><small>Somando os pedidos reais do período.</small></div>}
+
+          {report && <>
+            <div className="report-heading"><div><p className="eyebrow">Resumo do período</p><h2>{report.periodLabel}</h2><small>Faturamento considera apenas pedidos concluídos. Horário de Guaxupé.</small></div><span><CalendarDays size={17}/>Atualizado às {new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).format(new Date(report.generatedAt))}</span></div>
+
+            <div className="report-metrics">
+              <article><span><DollarSign size={22}/></span><div><small>Faturamento</small><strong>{formatCurrency(report.summary.grossRevenueCents)}</strong><em>{report.summary.completedCount} {report.summary.completedCount === 1 ? "pedido concluído" : "pedidos concluídos"}</em></div></article>
+              <article><span><ReceiptText size={21}/></span><div><small>Pedidos recebidos</small><strong>{report.summary.orderCount}</strong><em>{report.summary.inProgressCount} em andamento</em></div></article>
+              <article><span><BarChart3 size={21}/></span><div><small>Ticket médio</small><strong>{formatCurrency(report.summary.averageTicketCents)}</strong><em>média dos concluídos</em></div></article>
+              <article><span><CircleAlert size={21}/></span><div><small>Cancelamentos</small><strong>{report.summary.cancellationRate.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</strong><em>{report.summary.cancelledCount} no período</em></div></article>
+            </div>
+
+            <section className="report-card report-chart-card">
+              <header><div><p className="eyebrow">Evolução</p><h3>Faturamento concluído</h3></div><span>Taxas de entrega: <b>{formatCurrency(report.summary.deliveryFeesCents)}</b></span></header>
+              <div className="report-chart-scroll">
+                <div className="report-bars" style={{ gridTemplateColumns: `repeat(${report.series.length}, minmax(${report.period === "month" ? 20 : 34}px, 1fr))` }}>
+                  {report.series.map((point, index) => <div className="report-bar" key={`${point.label}-${index}`} title={`${point.label}: ${formatCurrency(point.revenueCents)} · ${point.orders} pedidos`}><div className="report-bar-track"><i style={{ height: `${point.revenueCents ? Math.max(8, Math.round((point.revenueCents / reportChartMax) * 100)) : 2}%` }}/></div><small>{point.label}</small></div>)}
+                </div>
+              </div>
+            </section>
+
+            <div className="report-detail-grid">
+              <section className="report-card report-products">
+                <header><div><p className="eyebrow">Cardápio</p><h3>Produtos mais vendidos</h3></div><Package size={20}/></header>
+                {report.topProducts.length ? <ol>{report.topProducts.map((product, index) => <li key={product.productId}><span>{index + 1}</span><div><b>{product.name}</b><small>{product.quantity} {product.quantity === 1 ? "unidade" : "unidades"}</small></div><strong>{formatCurrency(product.revenueCents)}</strong></li>)}</ol> : <div className="report-empty">Nenhum pedido concluído neste período.</div>}
+              </section>
+
+              <section className="report-card report-payments">
+                <header><div><p className="eyebrow">Recebimentos</p><h3>Formas de pagamento</h3></div><DollarSign size={20}/></header>
+                <div className="report-progress-list">{report.paymentMethods.map((method) => <article key={method.method}><div><span><b>{method.label}</b><small>{method.count} {method.count === 1 ? "pedido" : "pedidos"}</small></span><strong>{formatCurrency(method.revenueCents)}</strong></div><i><span style={{ width: `${method.revenueCents ? Math.max(5, Math.round((method.revenueCents / reportPaymentMax) * 100)) : 0}%` }}/></i></article>)}</div>
+                <div className="report-fulfillment">{report.fulfillment.map((item) => <article key={item.type}><span>{item.type === "delivery" ? <Truck size={18}/> : <Package size={18}/>}</span><div><b>{item.label}</b><small>{item.count} · {formatCurrency(item.revenueCents)}</small></div></article>)}</div>
+              </section>
+
+              <section className="report-card report-statuses">
+                <header><div><p className="eyebrow">Operação</p><h3>Situação dos pedidos</h3></div><BarChart3 size={20}/></header>
+                <div>{report.statuses.map((item) => <article className={`report-status-${item.status}`} key={item.status}><span>{item.label}</span><strong>{item.count}</strong></article>)}</div>
+              </section>
+            </div>
+          </>}
         </section>}
       </section>
 
