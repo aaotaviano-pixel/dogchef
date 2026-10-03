@@ -239,11 +239,16 @@ a { color: inherit; text-decoration: none; }
 .order-customer { display: grid; gap: 3px; margin: 15px 0 11px; }
 .order-customer b { font-size: 15px; }
 .order-customer small { color: #88786e; font-size: 10px; }
+.order-customer-phone { color: #554942 !important; font-weight: 750; }
+.order-destination { line-height: 1.45; overflow-wrap: anywhere; }
 .kitchen-order ul { display: grid; gap: 7px; flex: 1; margin: 0; padding: 11px 0; border-top: 1px solid #f0e9e4; border-bottom: 1px solid #f0e9e4; list-style: none; }
 .kitchen-order li { display: flex; gap: 7px; font-size: 11px; }
 .kitchen-order li > b { color: var(--orange); }
-.kitchen-order li > span { display: grid; gap: 2px; }
+.kitchen-order li > span { min-width: 0; display: grid; gap: 2px; line-height: 1.35; }
 .kitchen-order li small { color: #8a7c73; font-size: 10px; }
+.order-optionals b { color: #5d5149; }
+.kitchen-order .order-note { display: block; margin-top: 4px; padding: 8px 9px; border-left: 3px solid #d69b23; border-radius: 0 7px 7px 0; color: #5b3c04; background: #fff3cf; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
+.kitchen-order .order-note b { color: #7c5100; }
 .kitchen-order footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
 .kitchen-order footer strong { font-size: 15px; }
 .kitchen-order footer small { color: #88786e; font-size: 10px; }
@@ -897,6 +902,23 @@ a { color: inherit; text-decoration: none; }
   .admin-manager .admin-content { margin-left: 248px; padding: 38px 34px 70px; }
   .admin-menu-button, .admin-mobile-nav { display: none; }
   .admin-manager .admin-sidebar { display: flex; }
+  .admin-manager .order-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .admin-manager .kitchen-order { min-height: 360px; padding: 20px; border-top-width: 5px; border-radius: 12px; }
+  .admin-manager .order-code { font-size: 14px; }
+  .admin-manager .status-chip { padding: 6px 9px; font-size: 11px; }
+  .admin-manager .order-customer { gap: 5px; margin: 18px 0 14px; }
+  .admin-manager .order-customer b { font-size: 18px; }
+  .admin-manager .order-customer small { font-size: 13px; }
+  .admin-manager .kitchen-order ul { gap: 12px; padding: 15px 0; }
+  .admin-manager .kitchen-order li { gap: 10px; font-size: 15px; line-height: 1.4; }
+  .admin-manager .kitchen-order li > b { min-width: 24px; font-size: 16px; }
+  .admin-manager .kitchen-order li > span { gap: 5px; }
+  .admin-manager .kitchen-order li small { font-size: 13px; }
+  .admin-manager .kitchen-order .order-note { margin-top: 5px; padding: 9px 10px; font-size: 14px; }
+  .admin-manager .kitchen-order footer { padding: 16px 0; }
+  .admin-manager .kitchen-order footer strong { font-size: 20px; }
+  .admin-manager .kitchen-order footer small { font-size: 13px; }
+  .admin-manager .order-actions button { min-height: 44px; font-size: 13px; }
   .admin-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .showcase-layout { grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); }
   .admin-modal-backdrop { padding: 28px; place-items: start center; }

@@ -122,6 +122,19 @@ function cardClass(status: OrderStatus) {
   return status.replaceAll("_", "-");
 }
 
+function orderDestinationLabel(order: Order) {
+  if (order.deliveryType === "pickup") return "Retirada no balcão";
+  const address = order.customer.address;
+  if (!address) return "Entrega · endereço pendente";
+  return [
+    "Entrega",
+    `${address.street}, ${address.number}`,
+    address.neighborhood,
+    address.complement,
+    address.reference ? `Ref.: ${address.reference}` : undefined,
+  ].filter(Boolean).join(" · ");
+}
+
 export function AdminDashboard() {
   const router = useRouter();
   const [data, setData] = useState<DashboardPayload | null>(null);
@@ -721,8 +734,12 @@ export function AdminDashboard() {
   function renderOrder(order: Order) {
     return <article key={order.id} className={`kitchen-order ${cardClass(order.status)}`}>
       <header><span className="order-code">{order.publicCode}</span><span className="status-chip">{labels[order.status]}</span></header>
-      <div className="order-customer"><b>{order.customer.name}</b><small>{order.deliveryType === "delivery" ? `Entrega · ${order.customer.address?.neighborhood || "endereço pendente"}` : "Retirada no balcão"}</small></div>
-      <ul>{order.quote.items.map((item, index) => <li key={`${item.productId}-${index}`}><b>{item.quantity}×</b><span>{item.productName}{item.optionals.length > 0 && <small>{item.optionals.map((option) => option.name).join(", ")}</small>}{item.note && <small>Obs.: {item.note}</small>}</span></li>)}</ul>
+      <div className="order-customer">
+        <b>{order.customer.name}</b>
+        <small className="order-customer-phone">{order.customer.phone}</small>
+        <small className="order-destination">{orderDestinationLabel(order)}</small>
+      </div>
+      <ul>{order.quote.items.map((item, index) => <li key={`${item.productId}-${index}`}><b>{item.quantity}×</b><span>{item.productName}{item.optionals.length > 0 && <small className="order-optionals"><b>Adicionais:</b> {item.optionals.map((option) => option.name).join(", ")}</small>}{item.note && <small className="order-note"><b>Observação:</b> {item.note}</small>}</span></li>)}</ul>
       <footer><strong>{formatCurrency(order.quote.totalCents)}</strong><small>{order.paymentMethod === "pix" ? `Pix · ${order.paymentStatus}` : order.paymentMethod === "cash" ? "Dinheiro" : "Cartão"}</small></footer>
       <div className="order-actions">{nextActions[order.status]?.filter((action) => order.deliveryType === "delivery" || action.status !== "out_for_delivery").map((action) => { const Icon = action.icon; return <button key={action.status} disabled={busyId === order.id} className={action.status === "cancelled" ? "secondary-danger" : "button button-dark"} onClick={() => void updateStatus(order, action.status)}><Icon size={16}/>{action.label}</button>; })}{!["pending_approval", "cancelled"].includes(order.status) && <button className="button button-ghost order-print-button" disabled={busyId === `order-${order.id}`} onClick={() => void printOrderLocally(order)}><Printer size={15}/>{busyId === `order-${order.id}` ? "Enviando..." : "Imprimir"}</button>}</div>
     </article>;
