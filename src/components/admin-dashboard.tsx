@@ -24,6 +24,7 @@ import {
   Menu,
   Package,
   Pencil,
+  Phone,
   Plus,
   Power,
   Printer,
@@ -99,6 +100,25 @@ const printLabels = {
   dead: "Falha na impressão",
 } as const;
 
+const paymentLabels: Record<Order["paymentStatus"], string> = {
+  not_required: "não necessário",
+  awaiting_configuration: "aguardando configuração",
+  pending: "aguardando pagamento",
+  approved: "aprovado",
+  rejected: "recusado",
+  expired: "expirado",
+  cancelled: "cancelado",
+  failed: "falhou",
+};
+
+const orderTimeFormatter = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 const nextActions: Partial<Record<OrderStatus, { status: OrderStatus; label: string; icon: typeof Check }[]>> = {
   pending_approval: [
     { status: "confirmed", label: "Aceitar", icon: Check },
@@ -139,6 +159,17 @@ function orderDestinationLabel(order: Order) {
     address.complement,
     address.reference ? `Ref.: ${address.reference}` : undefined,
   ].filter(Boolean).join(" · ");
+}
+
+function orderPaymentLabel(order: Order) {
+  if (order.paymentMethod === "pix") return `Pix · ${paymentLabels[order.paymentStatus]}`;
+  if (order.paymentMethod === "cash") return "Dinheiro";
+  return "Cartão na entrega";
+}
+
+function orderReceivedAtLabel(createdAt: string) {
+  const receivedAt = new Date(createdAt);
+  return Number.isNaN(receivedAt.getTime()) ? "Horário indisponível" : orderTimeFormatter.format(receivedAt);
 }
 
 export function AdminDashboard() {
@@ -770,14 +801,16 @@ export function AdminDashboard() {
 
   function renderOrder(order: Order) {
     return <article key={order.id} className={`kitchen-order ${cardClass(order.status)}`}>
-      <header><span className="order-code">{order.publicCode}</span><span className="status-chip">{labels[order.status]}</span></header>
+      <header><span className="order-identity"><span className="order-code">{order.publicCode}</span><time dateTime={order.createdAt}><Clock3 size={14}/>Recebido {orderReceivedAtLabel(order.createdAt)}</time></span><span className="status-chip">{labels[order.status]}</span></header>
       <div className="order-customer">
-        <b>{order.customer.name}</b>
-        <small className="order-customer-phone">{order.customer.phone}</small>
-        <small className="order-destination">{orderDestinationLabel(order)}</small>
+        <span className="order-section-label">Cliente</span>
+        <b className="order-customer-name">{order.customer.name}</b>
+        <small className="order-customer-phone"><Phone size={15}/><span>{order.customer.phone}</span></small>
+        <small className="order-destination"><MapPin size={15}/><span>{orderDestinationLabel(order)}</span></small>
       </div>
+      <div className="order-items-heading"><ReceiptText size={15}/>Itens do pedido</div>
       <ul>{order.quote.items.map((item, index) => <li key={`${item.productId}-${index}`}><b>{item.quantity}×</b><span>{item.productName}{item.optionals.length > 0 && <small className="order-optionals"><b>Adicionais:</b> {item.optionals.map((option) => option.name).join(", ")}</small>}{item.note && <small className="order-note"><b>Observação:</b> {item.note}</small>}</span></li>)}</ul>
-      <footer><strong>{formatCurrency(order.quote.totalCents)}</strong><small>{order.paymentMethod === "pix" ? `Pix · ${order.paymentStatus}` : order.paymentMethod === "cash" ? "Dinheiro" : "Cartão"}</small></footer>
+      <footer><span className="order-total"><small>Total do pedido</small><strong>{formatCurrency(order.quote.totalCents)}</strong><em>{order.deliveryType === "delivery" ? `Produtos ${formatCurrency(order.quote.subtotalCents)} + entrega ${formatCurrency(order.quote.deliveryFeeCents)}` : "Retirada sem taxa de entrega"}</em></span><span className="order-payment"><small>Pagamento</small><b>{orderPaymentLabel(order)}</b></span></footer>
       <div className="order-actions">{nextActions[order.status]?.filter((action) => order.deliveryType === "delivery" || action.status !== "out_for_delivery").map((action) => { const Icon = action.icon; return <button key={action.status} disabled={busyId === order.id} className={action.status === "cancelled" ? "secondary-danger" : "button button-dark"} onClick={() => void updateStatus(order, action.status)}><Icon size={16}/>{action.label}</button>; })}{!["pending_approval", "cancelled"].includes(order.status) && <button className="button button-ghost order-print-button" disabled={busyId === `order-${order.id}`} onClick={() => void printOrderLocally(order)}><Printer size={15}/>{busyId === `order-${order.id}` ? "Enviando..." : "Imprimir"}</button>}</div>
     </article>;
   }

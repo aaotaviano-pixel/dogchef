@@ -225,35 +225,46 @@ a { color: inherit; text-decoration: none; }
 .kitchen-empty h3, .kitchen-empty p { margin: 0; }
 .kitchen-empty h3 { color: #45342c; font-family: Georgia, serif; font-size: 21px; }
 .kitchen-empty p { max-width: 280px; font-size: 12px; }
-.order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 13px; }
-.kitchen-order { display: flex; min-height: 300px; flex-direction: column; padding: 15px; border: 1px solid #e2d8d0; border-top: 4px solid #ca6245; border-radius: 15px; background: white; box-shadow: 0 7px 17px rgba(61,34,20,.055); }
+.order-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; }
+.kitchen-order { display: flex; min-height: 340px; flex-direction: column; padding: 17px; border: 1px solid #ded4cc; border-top: 5px solid #ca6245; border-radius: 15px; background: white; box-shadow: 0 9px 22px rgba(61,34,20,.075); }
 .kitchen-order.confirmed { border-top-color: #2d90d0; }
 .kitchen-order.preparing { border-top-color: #e4a121; }
 .kitchen-order.out-for-delivery { border-top-color: #8568d4; }
 .kitchen-order header { display: flex; align-items: center; justify-content: space-between; }
-.order-code { color: var(--orange); font-size: 11px; font-weight: 900; letter-spacing: .04em; }
+.order-identity { display: grid; gap: 5px; }
+.order-identity time { display: inline-flex; align-items: center; gap: 5px; color: #6e625b; font-size: 11px; font-weight: 750; }
+.order-code { color: var(--orange); font-size: 13px; font-weight: 900; letter-spacing: .04em; }
 .status-chip { padding: 5px 7px; border-radius: 6px; color: #a9472d; background: #ffebe5; font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .confirmed .status-chip { color: #216a9d; background: #e4f3ff; }
 .preparing .status-chip { color: #906006; background: #fff0c9; }
 .out-for-delivery .status-chip { color: #6550ad; background: #ede7ff; }
-.order-customer { display: grid; gap: 3px; margin: 15px 0 11px; }
-.order-customer b { font-size: 15px; }
-.order-customer small { color: #88786e; font-size: 10px; }
-.order-customer-phone { color: #554942 !important; font-weight: 750; }
+.order-customer { display: grid; gap: 6px; margin: 16px 0 13px; }
+.order-section-label, .order-items-heading { color: #76665d; font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.order-customer-name { color: #261e1a; font-size: 17px; line-height: 1.2; }
+.order-customer small { color: #695d55; font-size: 12px; }
+.order-customer-phone, .order-destination { display: flex; align-items: flex-start; gap: 7px; }
+.order-customer-phone { color: #403630 !important; font-weight: 800; }
+.order-customer-phone svg, .order-destination svg { flex: 0 0 auto; margin-top: 1px; color: #a72d35; }
 .order-destination { line-height: 1.45; overflow-wrap: anywhere; }
+.order-items-heading { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
+.order-items-heading svg { color: #a72d35; }
 .kitchen-order ul { display: grid; gap: 7px; flex: 1; margin: 0; padding: 11px 0; border-top: 1px solid #f0e9e4; border-bottom: 1px solid #f0e9e4; list-style: none; }
-.kitchen-order li { display: flex; gap: 7px; font-size: 11px; }
+.kitchen-order li { display: flex; gap: 8px; font-size: 13px; }
 .kitchen-order li > b { color: var(--orange); }
 .kitchen-order li > span { min-width: 0; display: grid; gap: 2px; line-height: 1.35; }
-.kitchen-order li small { color: #8a7c73; font-size: 10px; }
+.kitchen-order li small { color: #6e625a; font-size: 12px; }
 .order-optionals b { color: #5d5149; }
 .kitchen-order .order-note { display: block; margin-top: 4px; padding: 8px 9px; border-left: 3px solid #d69b23; border-radius: 0 7px 7px 0; color: #5b3c04; background: #fff3cf; font-weight: 700; line-height: 1.45; overflow-wrap: anywhere; }
 .kitchen-order .order-note b { color: #7c5100; }
-.kitchen-order footer { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; }
-.kitchen-order footer strong { font-size: 15px; }
-.kitchen-order footer small { color: #88786e; font-size: 10px; }
+.kitchen-order footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding: 14px 0; }
+.order-total, .order-payment { display: grid; gap: 3px; }
+.order-total strong { color: #201916; font-size: 18px; }
+.kitchen-order footer small { color: #7a6d65; font-size: 10px; font-weight: 850; letter-spacing: .05em; text-transform: uppercase; }
+.order-total em { color: #62564f; font-size: 10px; font-style: normal; font-weight: 650; line-height: 1.35; }
+.order-payment { flex: 0 0 auto; text-align: right; }
+.order-payment b { color: #332a25; font-size: 12px; }
 .order-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
-.order-actions button { min-height: 37px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 800; }
+.order-actions button { min-height: 42px; border: 0; border-radius: 9px; font-size: 12px; font-weight: 850; }
 .order-actions .button { padding: 8px; }
 .order-actions .order-print-button { grid-column: 1 / -1; justify-content: center; }
 .secondary-danger { color: #b13a31; background: #ffede9; }
@@ -977,23 +988,27 @@ a { color: inherit; text-decoration: none; }
   .admin-manager .admin-content { margin-left: 248px; padding: 38px 34px 70px; }
   .admin-menu-button, .admin-mobile-nav { display: none; }
   .admin-manager .admin-sidebar { display: flex; }
-  .admin-manager .order-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
-  .admin-manager .kitchen-order { min-height: 360px; padding: 20px; border-top-width: 5px; border-radius: 12px; }
+  .admin-manager .order-grid { grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 18px; }
+  .admin-manager .kitchen-order { min-height: 400px; padding: 22px; border-top-width: 6px; border-radius: 12px; }
   .admin-manager .order-code { font-size: 14px; }
+  .admin-manager .order-identity time { font-size: 12px; }
   .admin-manager .status-chip { padding: 6px 9px; font-size: 11px; }
   .admin-manager .order-customer { gap: 5px; margin: 18px 0 14px; }
-  .admin-manager .order-customer b { font-size: 18px; }
-  .admin-manager .order-customer small { font-size: 13px; }
+  .admin-manager .order-customer-name { font-size: 19px; }
+  .admin-manager .order-customer small { font-size: 14px; }
+  .admin-manager .order-section-label, .admin-manager .order-items-heading { font-size: 10px; }
   .admin-manager .kitchen-order ul { gap: 12px; padding: 15px 0; }
-  .admin-manager .kitchen-order li { gap: 10px; font-size: 15px; line-height: 1.4; }
+  .admin-manager .kitchen-order li { gap: 10px; font-size: 16px; line-height: 1.4; }
   .admin-manager .kitchen-order li > b { min-width: 24px; font-size: 16px; }
   .admin-manager .kitchen-order li > span { gap: 5px; }
-  .admin-manager .kitchen-order li small { font-size: 13px; }
-  .admin-manager .kitchen-order .order-note { margin-top: 5px; padding: 9px 10px; font-size: 14px; }
+  .admin-manager .kitchen-order li small { font-size: 14px; }
+  .admin-manager .kitchen-order .order-note { margin-top: 6px; padding: 11px 12px; font-size: 15px; }
   .admin-manager .kitchen-order footer { padding: 16px 0; }
-  .admin-manager .kitchen-order footer strong { font-size: 20px; }
-  .admin-manager .kitchen-order footer small { font-size: 13px; }
-  .admin-manager .order-actions button { min-height: 44px; font-size: 13px; }
+  .admin-manager .order-total strong { font-size: 22px; }
+  .admin-manager .kitchen-order footer small { font-size: 11px; }
+  .admin-manager .order-total em { font-size: 11px; }
+  .admin-manager .order-payment b { font-size: 14px; }
+  .admin-manager .order-actions button { min-height: 48px; font-size: 14px; }
   .admin-product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .showcase-layout { grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); }
   .admin-modal-backdrop { padding: 28px; place-items: start center; }
