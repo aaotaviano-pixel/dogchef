@@ -1,0 +1,46 @@
+{
+  "capturedAt": "2026-10-09T00:20:57.101Z",
+  "source": "https://dogdochef.ddns.net/",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "deviceScaleFactor": 2
+  },
+  "fullPage": {
+    "width": 390,
+    "height": 8569
+  },
+  "palette": {
+    "red": "#d6402c",
+    "redBright": "#d6402c",
+    "mustard": "#f0a202",
+    "ink": "#241c15",
+    "charcoal": "",
+    "cream": "#fff6ec",
+    "paper": "",
+    "line": "",
+    "bodyBackground": "rgb(255, 246, 236)",
+    "bodyColor": "rgb(36, 28, 21)"
+  },
+  "anchors": {
+    "cardapio": 385,
+    "destaques": 501,
+    "sobre": 7548,
+    "documentHeight": 8569
+  },
+  "verifiedFlow": {
+    "productOpened": true,
+    "added": true,
+    "cartOpened": true
+  },
+  "files": [
+    "site-mobile-full.png",
+    "site-mobile-home.png",
+    "site-mobile-highlights.png",
+    "site-mobile-about.png",
+    "site-mobile-product.png",
+    "site-mobile-cart.png"
+  ],
+  "aboutText": "SOBRE NÓS O SABOR DO PRENSADO, DO SEU JEITO. O cardápio da Dog do Chef reúne hot dogs tradicionais, prensados, gratinados, combos, porções e bebidas. Escolha os adicionais, defina retirada ou entrega e acompanhe tudo pela sua conta. Escolher meu pedido",
+  "safety": "A captura adicionou um item apenas ao carrinho local do navegador e parou antes de login, pedido ou pagamento."
+}
